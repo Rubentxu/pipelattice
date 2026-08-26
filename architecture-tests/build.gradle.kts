@@ -13,6 +13,7 @@ dependencies {
     testImplementation(projects.resourceModel)
     testImplementation(projects.pipelineCompose)
     testImplementation(projects.policyEngine)
+    testImplementation(projects.buildEngine)
     testImplementation(libs.archunit.junit5)
 }
 
@@ -88,4 +89,30 @@ val farch012DefensiveScan by tasks.registering {
 
 tasks.named("check") {
     dependsOn(farch012DefensiveScan)
+}
+
+/**
+ * FARCH-013 defensive scan: verify build-engine/build.gradle.kts does not contain
+ * forbidden dependency tokens (processbuilder, runtime.exec, exitprocess, getenv).
+ * This guards against reintroducing process-execution deps at the build level,
+ * complementary to the ArchUnit bytecode check.
+ */
+val farch013DefensiveScan by tasks.registering {
+    val buildFile = rootProject.file("build-engine/build.gradle.kts")
+    inputs.file(buildFile)
+    doLast {
+        val content = buildFile.readText()
+        val forbiddenTokens = listOf("processbuilder", "runtime.exec", "exitprocess", "getenv")
+        val foundTokens = forbiddenTokens.filter { content.lowercase().contains(it) }
+        check(foundTokens.isEmpty()) {
+            "FARCH-013 DEFENSIVE SCAN FAILED: build-engine/build.gradle.kts must not contain " +
+                "forbidden dependency tokens: ${foundTokens.joinToString()}. " +
+                "FARCH-013 requires build-engine to be process-execution-agnostic."
+        }
+        println("FARCH-013 defensive scan PASSED: no forbidden tokens in build-engine/build.gradle.kts")
+    }
+}
+
+tasks.named("check") {
+    dependsOn(farch013DefensiveScan)
 }
