@@ -19,4 +19,7 @@ public object CompositionDiagnosticCodes {
 
     /** Merge conflict between two composition units or type mismatch during merge. */
     public val MERGE_CONFLICT: DiagnosticCode = DiagnosticCode("COMPOSE-MERGE-001")
+
+    /** Unresolved import reference - catalog resource could not be resolved. */
+    public val IMPORT_UNRESOLVED: DiagnosticCode = DiagnosticCode("COMPOSE-IMPORT-003")
 }
