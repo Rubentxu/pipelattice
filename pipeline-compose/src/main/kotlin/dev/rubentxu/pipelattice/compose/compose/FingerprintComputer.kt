@@ -1,6 +1,7 @@
 package dev.rubentxu.pipelattice.compose.compose
 
 import dev.rubentxu.pipelattice.compose.domain.Provenance
+import dev.rubentxu.pipelattice.resource.ParameterType
 import dev.rubentxu.pipelattice.resource.ParameterValue
 import java.security.MessageDigest
 import java.util.LinkedHashMap
@@ -80,9 +81,9 @@ internal object FingerprintComputer {
      * Converts a ParameterValue to its canonical representation.
      */
     private fun parameterValueToCanonical(value: ParameterValue): Any = when (value) {
-        is ParameterValue.IntValue -> mapOf("type" to "integer", "value" to value.value)
-        is ParameterValue.BoolValue -> mapOf("type" to "boolean", "value" to value.value)
-        is ParameterValue.StringValue -> mapOf("type" to "string", "value" to value.value)
+        is ParameterValue.IntValue -> mapOf("type" to ParameterType.INTEGER.wireName, "value" to value.value)
+        is ParameterValue.BoolValue -> mapOf("type" to ParameterType.BOOLEAN.wireName, "value" to value.value)
+        is ParameterValue.StringValue -> mapOf("type" to ParameterType.STRING.wireName, "value" to value.value)
     }
 
     /**

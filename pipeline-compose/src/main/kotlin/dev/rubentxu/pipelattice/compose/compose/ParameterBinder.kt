@@ -149,8 +149,8 @@ internal class ParameterBinder(
      */
     private val ParameterValue.typeName: String
         get() = when (this) {
-            is ParameterValue.IntValue -> "integer"
-            is ParameterValue.BoolValue -> "boolean"
-            is ParameterValue.StringValue -> "string"
+            is ParameterValue.IntValue -> ParameterType.INTEGER.wireName
+            is ParameterValue.BoolValue -> ParameterType.BOOLEAN.wireName
+            is ParameterValue.StringValue -> ParameterType.STRING.wireName
         }
 }
