@@ -9,6 +9,45 @@ _None — next milestone (M8+ slices) will be defined when triggered by user req
 
 ## Recently Closed Milestones
 
+- **m9-fleet-candidate-diff** — Status: completed — Closed cycle
+  `p-4c8272c9e7dcdfa2/m9-fleet-candidate-diff`, sequence=90, ledger=91 events,
+  runtime CLOSED on 2026-08-26. Path: **A-lite** (3 chained slices, ~1090 LOC).
+  Tag `v0.7.0-m9-fleet-candidate-diff` peels to `bea4665` on main (4 commits
+  over base `4b55aed`, 338/0/0 tests workspace, 11/11 REQ COMPLIANT, FARCH-011/
+  013/015 active, verify PASS_WITH_WARNINGS 280/300, debt PASS_WITH_WARNINGS
+  0/0/5/17). 3 chained slices stacked-to-main:
+  - **Slice 1 (~290 LOC)**: foundations — `:graph-projection` domain gains
+    9 new EdgeKinds (DERIVED_FROM, USES, REQUIRES, PROVIDES, GOVERNED_BY,
+    TARGETS, PRODUCES, CONSUMES, COMPILES_TO → 14/14 complete); new
+    `AffectedSubgraph.traverse(BFS, maxDepth=64, visited)` + `.blastRadius()`
+    + `AdjacencyIndex` lazy O(1); `:build-engine/CommandResult.Failed` gains
+    `signal: Int?` + `durationMs: Long`.
+  - **Slice 2 (~313 LOC)**: ConfigurationCompiler decorator wiring — NEW
+    `:pipeline-compose/translate/CompositionToGraphTranslator.kt` (internal
+    pure mapper per Q8 mapping table: IMPORTS+EXTENDS for PROFILE_IMPORT,
+    SELECTS for PROFILE, OVERRIDES for LOCAL) + NEW
+    `GraphEmittingCompositionEngine(delegate, store)` decorator
+    (`CompositionEngine by delegate` — does NOT modify M2 frozen
+    `CompositionEngine` interface or `DefaultCompositionEngine` class; all
+    M2 golden UAT tests green unmodified).
+  - **Slice 3 (~487 LOC)**: NEW `:fleet-diff` module — `FleetCandidateDiff`
+    orchestrator + `FleetDiffReport` (7 sections per spec §8: affectedProjects,
+    effectiveChanges, invalidPlans, newPolicyViolations, resolvedPolicyViolations,
+    providerChanges, localOverrides) + sealed `FleetDiffChange`
+    (Added/Removed/Modified) + `SnapshotRepository` port +
+    `InMemorySnapshotRepository` (ConcurrentHashMap thread-safe) +
+    hand-written `FleetDiffJsonEncoder` (schema "fleet-diff/v1", no kotlinx
+    dep per ADR-0021) + `cli/Main.kt` (stdlib arg parsing, --baseline +
+    --candidate required). Module depends on `:foundation + :graph-projection`
+    only (Q10: reusable across compilers).
+  Closed **3 of 5 accumulated gaps**: (3) CommandResult.Failed metadata,
+  (4) ConfigurationCompiler → GraphChangeSet wiring (HIGH), (5) Affected
+  subgraph traversal. 3 warnings retained as post-release debt items:
+  application plugin missing on :fleet-diff (W1), CLI exit-code contract
+  deviation (W2), LOC envelope overrun 2795 vs 1090 planned driven by test
+  granularity (W3). Cycle artifacts in
+  `~/.local/share/sddk/projects/p-4c8272c9e7dcdfa2/cycle-artifacts/p-4c8272c9e7dcdfa2/m9-fleet-candidate-diff/`.
+
 - **m8-debt-cleanup-2** — Status: completed — Closed cycle
   `p-4c8272c9e7dcdfa2/m8-debt-cleanup-2`, sequence=77, ledger=77 events,
   runtime CLOSED on 2026-08-26. Path: **A-min** (smoke debt-verify). Tag
