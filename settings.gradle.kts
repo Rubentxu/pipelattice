@@ -24,3 +24,5 @@ include(":testkit")
 include(":architecture-tests")
 include(":resource-model")
 include(":config-compiler")
+// M2 — Composition core slice (PR#1: scaffold + diagnostic codes snapshot).
+include(":pipeline-compose")
