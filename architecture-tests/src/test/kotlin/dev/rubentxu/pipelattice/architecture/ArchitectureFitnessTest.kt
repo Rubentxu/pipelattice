@@ -94,5 +94,19 @@ class ArchitectureFitnessTest {
         ).check(imported)
     }
 
+    @ArchTest
+    fun `FARCH-010 - resource-model has no YAML or JSON adapter dependencies`(imported: JavaClasses) {
+        rule(
+            noClasses().that().resideInAPackage("dev.rubentxu.pipelattice.resource..")
+                .should().dependOnClassesThat()
+                .resideInAnyPackage(
+                    "org.snakeyaml..",
+                    "com.charleskorn.kaml..",
+                    "com.fasterxml.jackson..",
+                ),
+            "resource-model must be YAML/JACKSON-agnostic (ADR-0021)",
+        ).check(imported)
+    }
+
     private fun rule(definition: ArchRule, because: String): ArchRule = definition.because(because)
 }

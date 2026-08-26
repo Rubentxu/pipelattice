@@ -10,5 +10,6 @@ kotlin {
 dependencies {
     testImplementation(projects.foundation)
     testImplementation(projects.testkit)
+    testImplementation(projects.resourceModel)
     testImplementation(libs.archunit.junit5)
 }
