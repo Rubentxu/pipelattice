@@ -1,0 +1,2 @@
+[profile default imported] catalog://profiles/java-maven-container@4.3.0 → IntValue(21) (importedBy: catalog://profiles/java-maven-container@4.3.0)
+[local override applied] payments-api → IntValue(25) (overriddenBy: payments-api)

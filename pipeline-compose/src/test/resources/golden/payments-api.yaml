@@ -1,0 +1,10 @@
+apiVersion: pipelattice.dev/v1alpha1
+kind: PipelineDefinition
+metadata:
+  name: payments-api
+spec:
+  profile: catalog://profiles/java-maven-container@4.3.0
+  parameters:
+    javaVersion:
+      type: integer
+      value: 25
