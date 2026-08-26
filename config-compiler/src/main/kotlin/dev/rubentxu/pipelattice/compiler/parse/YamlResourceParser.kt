@@ -21,8 +21,8 @@ import dev.rubentxu.pipelattice.resource.PipelineProfileSpec
 import dev.rubentxu.pipelattice.resource.ResourceKind
 import dev.rubentxu.pipelattice.resource.ResourceParser
 import dev.rubentxu.pipelattice.resource.SourceDocument
-import org.snakeyaml.engine.v2.api.Load
 import org.snakeyaml.engine.v2.api.LoadSettings
+import org.snakeyaml.engine.v2.api.lowlevel.Compose
 import org.snakeyaml.engine.v2.exceptions.MarkedYamlEngineException
 import org.snakeyaml.engine.v2.nodes.Node
 import org.snakeyaml.engine.v2.nodes.NodeTuple
@@ -78,13 +78,16 @@ public class YamlResourceParser : ResourceParser {
 
     // --- document -----------------------------------------------------------
 
+    private val composer = Compose(LoadSettings.builder().build())
+
     private fun readRootNode(ctx: ReaderContext, document: SourceDocument): Node? =
         try {
-            val loaded = Load(LoadSettings.builder().build()).loadFromString(document.content)
-            loaded as? Node ?: run {
+            val loaded = composer.composeString(document.content)
+            if (!loaded.isPresent) {
                 ctx.error(ParseErrorCodes.MISSING, null, "document is empty")
-                null
+                return null
             }
+            loaded.get()
         } catch (marked: MarkedYamlEngineException) {
             reportSyntax(ctx, document.path, marked)
             null
