@@ -28,3 +28,5 @@ include(":config-compiler")
 include(":pipeline-compose")
 // M4 — Policy engine module (A-min: domain types, port, no-op impl, FARCH-012).
 include(":policy-engine")
+// M5 — Build engine module (A-min: shell, domain types, ports, FakeProcessRunner, FARCH-013).
+include(":build-engine")
