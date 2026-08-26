@@ -1,41 +1,95 @@
+[English](README.md) | [Español](README.es.md)
+
 # Pipelattice
 
-Configuration/control-plane that compiles typed, versioned GitOps configuration into an
-immutable, explainable `ResolvedPipelinePlan`. It does not execute pipelines; execution
-belongs to `pipeline-kotlin` behind a plan-protocol adapter (ADR-0001, ADR-0006).
+[![CI](https://github.com/Rubentxu/pipelattice/actions/workflows/ci.yml/badge.svg)](https://github.com/Rubentxu/pipelattice/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+![Kotlin](https://img.shields.io/badge/Kotlin-2.4.10-7F52FF.svg)
+![JVM](https://img.shields.io/badge/JVM-21-4c8e33.svg)
 
-The complete specification lives in [`../pipelattice-spec`](../pipelattice-spec/README.md).
-Accepted architecture decisions are tracked under [`docs/adr/`](docs/adr/).
+**Pipelattice is a GitOps configuration control-plane that compiles typed, versioned pipeline configuration into an immutable, explainable `ResolvedPipelinePlan`.**
 
-## Requirements
+It does **not** execute pipelines. Execution belongs to a runtime (such as [pipeline-kotlin](https://github.com/Rubentxu/pipeline-kotlin)) that consumes the compiled plan through a small versioned protocol adapter.
 
-- JDK 21 (`java temurin-21.0.8+9.0.LTS` via asdf, see `.tool-versions`)
-- Gradle wrapper (8.14.5), Kotlin 2.4.10
+## The problem it solves
 
-## Build & test (local CI is the gate)
+Enterprise CI/CD platforms tend to accumulate corporate decisions inside build-tool classes and shared libraries until thousands of pipelines become rigid, unauditable, and scary to change. Pipelattice turns that problem into **compilation of typed GitOps configuration**:
 
-```bash
-./gradlew build          # compile + tests + architecture fitness
-./gradlew :foundation:test
+```text
+Git (local repos + central catalog)
+        │
+        ▼
+Configuration Compiler ──► Configuration Graph ──► Fleet queries (impact, drift)
+        │
+        ▼
+ResolvedPipelinePlan (fingerprinted, provenance-tracked)
+        │
+        ▼
+Runtime adapter (execution stays outside)
 ```
 
-## Modules (M0 — Foundation & Architecture Harness)
+A company maintains a central catalog of profiles, policies, providers, environments and defaults. Each repository declares only its local intent — a happy-path `pipeline.yaml` fits in under 40 lines:
+
+```yaml
+apiVersion: pipelattice.dev/v1alpha1
+kind: PipelineDefinition
+metadata:
+  name: payments-api
+spec:
+  profile:
+    ref: catalog://profiles/java-maven-container@stable
+  parameters:
+    javaVersion: 21
+```
+
+## Design principles
+
+- **Git is the only truth.** The graph and plans are rebuildable projections; there is no mutable database of configuration.
+- **Typed end to end.** Errors surface at compile time; no `Map<String, Any?>` in public APIs.
+- **Governance built in.** Central configuration can be `default` (overridable), `guardrail` (bounded) or `mandatory` (non-removable).
+- **Explainable.** Every compiled value carries provenance: which file, which revision, which import put it there.
+- **Capabilities, not tools.** Maven, Gradle or Helm are providers of capabilities (`project.build`, `image.build`, …); workflows compose capabilities.
+- **Runtime-neutral core.** Usable from CLI, servers, IDEs, agents and runtimes — the domain never imports execution machinery.
+
+## Project status
+
+The project follows progressive milestones with explicit exit criteria (architecture harness first, functionality second).
+
+| Milestone | Scope | Status |
+|---|---|---|
+| **M0 — Foundation & Architecture Harness** | Multi-module build, convention plugins, `explicitApi`, warnings-as-errors, identity types, diagnostics model, ArchUnit fitness rules, CI | ✅ Done |
+| M1 — Typed Resource Model | Resource envelope, first resources, YAML parser adapter with positional diagnostics | 🚧 In progress |
+| M2 — Composition Compiler | Imports, merge semantics, patches, conflict diagnostics, provenance | ⏳ Planned |
+| M3+ | Policy engine, build vertical slice, reactive graph, fleet diff, bridge to runtime | ⏳ Planned |
+
+## Building from source
+
+Requirements: **JDK 21** (Gradle toolchain pins it) — everything else comes through the wrapper.
+
+```bash
+git clone https://github.com/Rubentxu/pipelattice.git
+cd pipelattice
+./gradlew build          # compile + unit tests + architecture fitness tests
+```
+
+Local verification is the gate: `./gradlew build` runs the same checks CI does.
+
+## Modules
 
 | Module | Purpose |
 |---|---|
 | `build-logic` | Convention plugins: JVM 21 toolchain, `explicitApi`, warnings-as-errors, JUnit platform |
-| `foundation` | Identity types (`ProjectId`, `ResourceRef`) and diagnostics model with stable error codes |
-| `testkit` | Shared test utilities (`CollectingDiagnosticSink`, later fakes per spec §12.8) |
-| `architecture-tests` | FARCH fitness rules enforced with ArchUnit |
+| `foundation` | Identity value types and the diagnostics model with stable error codes |
+| `testkit` | Shared test utilities (diagnostic sinks, future fakes) |
+| `architecture-tests` | Architecture fitness rules enforced with ArchUnit |
 
-Modules are added to `settings.gradle.kts` as they gain real content, one milestone slice at a
-time (pipelattice-spec/docs/01_ARCHITECTURE.md §4).
+Planned modules follow the milestone order above (`resource-model`, `config-compiler`, `workflow-model`, `capabilities-api`, `policy-engine`, `graph-projection`, providers, `cli`). New modules are only registered when they contain real content.
 
-## Definition of Done for every PR
+## Documentation
 
-- tests; architecture tests; stable diagnostic code for each new failure;
-- no compiler warning without justification; ADR if a boundary changes;
-- benchmark when touching a hot path (pipelattice-spec/docs/14_BOOTSTRAP.md §9).
+- [`docs/adr/`](docs/adr/) — accepted architecture decision records (project boundary, Git-as-truth, layered configuration, capabilities, governance, provenance, secrets…)
+- Engineering conventions live in the build logic itself: every PR requires tests, architecture tests, stable diagnostic codes for new failures, zero unjustified compiler warnings, and an ADR whenever a boundary changes.
 
-`main` stays green; features are small; spikes live on disposable branches and are promoted
-as decisions (ADRs), not necessarily as code.
+## License
+
+[MIT](LICENSE) © Rubentxu
