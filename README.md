@@ -58,8 +58,8 @@ The project follows progressive milestones with explicit exit criteria (architec
 | Milestone | Scope | Status |
 |---|---|---|
 | **M0 — Foundation & Architecture Harness** | Multi-module build, convention plugins, `explicitApi`, warnings-as-errors, identity types, diagnostics model, ArchUnit fitness rules, CI | ✅ Done |
-| M1 — Typed Resource Model | Resource envelope, first resources, YAML parser adapter with positional diagnostics | 🚧 In progress |
-| M2 — Composition Compiler | Imports, merge semantics, patches, conflict diagnostics, provenance | ⏳ Planned |
+| **M1 — Typed Resource Model** | Resource envelope, first resources, YAML parser adapter with positional diagnostics | ✅ Done |
+| **M2 — Composition Compiler (slice)** | Imports resolution + parameter overlay + replace-style merge + provenance + `explain(path)`. Subset §4 (3/9 capas) + §7 (3/6 reglas). UAT-001/002/015 covered | ✅ Done |
 | M3+ | Policy engine, build vertical slice, reactive graph, fleet diff, bridge to runtime | ⏳ Planned |
 
 ## Building from source
@@ -84,6 +84,7 @@ Local verification is the gate: `./gradlew build` runs the same checks CI does.
 | `architecture-tests` | Architecture fitness rules enforced with ArchUnit |
 | `resource-model` | Typed resource envelope, value classes for identity, governance and parameter types |
 | `config-compiler` | YAML parse adapter (SnakeYAML Engine); only module that knows about YAML |
+| `pipeline-compose` | Composition engine: imports resolution + parameter overlay + replace-style merge + provenance + `explain(path)`. Subset §4 (3/9 capas) + §7 (3/6 reglas). UAT-001/002/015 cubiertos. Enforces FARCH-011 (no YAML/JSON/GIT/serialization deps; bridges M1 via `ResourceParser` port only) |
 
 Future modules (`workflow-model`, `capabilities-api`, `policy-engine`, `graph-projection`, providers, `cli`) follow the milestone order and are only registered when they contain real content.
 

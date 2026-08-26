@@ -58,8 +58,8 @@ El proyecto avanza por hitos progresivos con criterios de salida explícitos (pr
 | Hito | Alcance | Estado |
 |---|---|---|
 | **M0 — Foundation & Architecture Harness** | Build multi-módulo, convention plugins, `explicitApi`, warnings-as-errors, tipos de identidad, modelo de diagnostics, reglas fitness con ArchUnit, CI | ✅ Completado |
-| M1 — Typed Resource Model | Envelope de recursos, primeros recursos, adaptador YAML con diagnostics posicionales | 🚧 En curso |
-| M2 — Composition Compiler | Imports, semántica de merge, patches, diagnósticos de conflicto, provenance | ⏳ Planificado |
+| **M1 — Typed Resource Model** | Envelope de recursos, primeros recursos, adaptador YAML con diagnostics posicionales | ✅ Completado |
+| **M2 — Composition Compiler (slice)** | Resolución de imports + parameter overlay + replace-style merge + provenance + `explain(path)`. Subset §4 (3/9 capas) + §7 (3/6 reglas). UAT-001/002/015 cubiertos | ✅ Completado |
 | M3+ | Policy engine, slice vertical de build, grafo reactivo, fleet diff, puente a runtime | ⏳ Planificado |
 
 ## Compilar desde fuente
@@ -84,6 +84,7 @@ La verificación local es la puerta: `./gradlew build` ejecuta las mismas compro
 | `architecture-tests` | Reglas fitness de arquitectura aplicadas con ArchUnit |
 | `resource-model` | Envelope de recursos tipado, value classes para identidad, governance y tipos de parámetros |
 | `config-compiler` | Adaptador de parseo YAML (SnakeYAML Engine); único módulo que conoce YAML |
+| `pipeline-compose` | Motor de composición: resolución de imports + parameter overlay + replace-style merge + provenance + `explain(path)`. Subset §4 (3/9 capas) + §7 (3/6 reglas). UAT-001/002/015 cubiertos. Aplica FARCH-011 (sin deps de YAML/JSON/GIT/serialization; puentea M1 solo vía el port `ResourceParser`) |
 
 Los módulos futuros (`workflow-model`, `capabilities-api`, `policy-engine`, `graph-projection`, providers, `cli`) siguen el orden de hitos y solo se registran cuando contienen código real.
 
