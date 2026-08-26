@@ -30,3 +30,5 @@ include(":pipeline-compose")
 include(":policy-engine")
 // M5 — Build engine module (A-min: shell, domain types, ports, FakeProcessRunner, FARCH-013).
 include(":build-engine")
+// M6 — Gradle abstraction proof: second provider, FARCH-014, gaps-report.
+include(":provider-gradle")
