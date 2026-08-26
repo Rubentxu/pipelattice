@@ -5,9 +5,27 @@ Execution roadmap for SDDK cycles. Canonical milestone definitions live in
 
 ## Active Milestones
 
-_None — next milestone (M5+ slices) will be defined when triggered by user request._
+_None — next milestone (M6+ slices) will be defined when triggered by user request._
 
 ## Recently Closed Milestones
+
+- **m6-gradle-abstraction-proof** — Status: completed — Closed cycle
+  `p-4c8272c9e7dcdfa2/m6-gradle-abstraction-proof`, sequence=57, ledger=57
+  events, runtime CLOSED on 2026-08-26. Path: **A-min** (smoke debt-verify).
+  Tag `v0.5.0-m6-gradle-abstraction-proof` peels to `671896c` on main (5 commits
+  over base `ad3ba95`, 242/0/0 tests workspace, 9 tests in `:provider-gradle`,
+  5/5 REQ COMPLIANT, FARCH-014 active with PROOF). New Gradle module
+  `:provider-gradle` delivers shell only: domain `GradleBuildArtifact` +
+  `GradleProjectModel`, fake `FakeGradleProvider` implementing
+  `ProjectInspector` + `ProjectTester` + `ProjectBuilder`, contract test
+  proving `:build-engine` abstraction holds for 2nd provider. **M5 Decision
+  Gate Verdict: PASS** — abstraction holds, no capability redesign required.
+  3 gaps documented in `gaps-report.md` (all defer/fix-now, no redesign): #1
+  LOW FARCH numbering drift (014 used by impl, reserved by spec for M11),
+  #2 MEDIUM `ProjectModel = typealias Any`, #3 MEDIUM `CommandResult.Failed`
+  missing signal/durationMs. Real Maven provider implementation still pending
+  (deferred to A-lite cycle). Cycle artifacts in
+  `~/.local/share/sddk/projects/p-4c8272c9e7dcdfa2/cycle-artifacts/p-4c8272c9e7dcdfa2/m6-gradle-abstraction-proof/`.
 
 - **m5-build-vertical-slice** — Status: completed — Closed cycle
   `p-4c8272c9e7dcdfa2/m5-build-vertical-slice`, sequence=49, ledger=49 events,
