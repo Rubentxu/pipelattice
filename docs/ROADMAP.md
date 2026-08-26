@@ -5,9 +5,28 @@ Execution roadmap for SDDK cycles. Canonical milestone definitions live in
 
 ## Active Milestones
 
-_None — next milestone (M7+ slices) will be defined when triggered by user request._
+_None — next milestone (M8+ slices) will be defined when triggered by user request._
 
 ## Recently Closed Milestones
+
+- **m8-debt-cleanup-2** — Status: completed — Closed cycle
+  `p-4c8272c9e7dcdfa2/m8-debt-cleanup-2`, sequence=77, ledger=77 events,
+  runtime CLOSED on 2026-08-26. Path: **A-min** (smoke debt-verify). Tag
+  `v0.6.1-m8-debt-cleanup-2` peels to `1eff5d0` on main (3 commits over base
+  `891cbe2`, 284/0/0 tests workspace, 33/0/0 in `:build-engine`, 4/4 REQ
+  COMPLIANT, FARCH-011..015 still green). Closed **2 of 5 accumulated gaps**:
+  (1) **FARCH docsync (LOW)**: `12_TESTING_FITNESS.md` §5 updated to reflect
+  FARCH-011..015 actual state; ADR-0026 created documenting the drift; reserved
+  FARCH-014/015/016 shifted to FARCH-017/018/019 for original M10/M11/M12 intent.
+  (2) **ProjectModel sealed (MEDIUM)**: `:build-engine/domain/ProjectModel.kt`
+  replaced `typealias ProjectModel = Any` with sealed interface (3 variants:
+  Generic, Maven, Gradle); backwards compat via `@Deprecated typealias
+  AnyProjectModel = ProjectModel.Generic` (1-release grace); `:provider-gradle/
+  GradleProjectModel` now typealiases to `ProjectModel.Gradle`. **3 gaps
+  deferred to M9 (A-lite)**: CommandResult.Failed metadata, ConfigurationCompiler
+  → GraphChangeSet wiring (HIGH — touches M2 frozen), affected-subgraph traversal.
+  Cycle artifacts in
+  `~/.local/share/sddk/projects/p-4c8272c9e7dcdfa2/cycle-artifacts/p-4c8272c9e7dcdfa2/m8-debt-cleanup-2/`.
 
 - **m7-reactive-graph** — Status: completed — Closed cycle
   `p-4c8272c9e7dcdfa2/m7-reactive-graph`, sequence=66, ledger=66 events,
