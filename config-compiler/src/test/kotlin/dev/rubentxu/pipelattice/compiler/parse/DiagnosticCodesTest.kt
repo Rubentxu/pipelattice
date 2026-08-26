@@ -166,9 +166,20 @@ class DiagnosticCodesTest {
     }
 
     @Test
-    fun `all seven error codes are defined`() {
-        // Sanity check: verify all 7 codes exist in ParseErrorCodes object
-        val allCodes = listOf(
+    fun `all seven error codes are defined in ParseErrorCodes object`() {
+        // Direct access to ParseErrorCodes (same module) to verify it defines all 7 expected codes.
+        // This replaces the previous tautology that just measured its own hardcoded size.
+        val actualCodes = listOf(
+            ParseErrorCodes.SYNTAX.value,
+            ParseErrorCodes.API_VERSION.value,
+            ParseErrorCodes.KIND.value,
+            ParseErrorCodes.UNKNOWN_FIELD.value,
+            ParseErrorCodes.MISSING.value,
+            ParseErrorCodes.TYPE.value,
+            ParseErrorCodes.INVALID_REF.value,
+        ).sorted()
+
+        val expectedCodes = listOf(
             "RESOURCE-YAML-001",
             "RESOURCE-APIVERSION-001",
             "RESOURCE-KIND-001",
@@ -176,7 +187,9 @@ class DiagnosticCodesTest {
             "RESOURCE-SCHEMA-001",
             "RESOURCE-SCHEMA-002",
             "REF-INVALID-001",
-        )
-        assertEquals(7, allCodes.size)
+        ).sorted()
+
+        assertEquals(expectedCodes, actualCodes,
+            "ParseErrorCodes should define exactly 7 error codes: $expectedCodes")
     }
 }

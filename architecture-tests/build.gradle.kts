@@ -13,3 +13,25 @@ dependencies {
     testImplementation(projects.resourceModel)
     testImplementation(libs.archunit.junit5)
 }
+
+/**
+ * FARCH-010 defensive scan: verify resource-model/build.gradle.kts does not contain
+ * snakeyaml as a dependency token. This guards against reintroducing YAML library deps
+ * at the build level, complementary to the ArchUnit bytecode check.
+ */
+val farch010DefensiveScan by tasks.registering {
+    val buildFile = rootProject.file("resource-model/build.gradle.kts")
+    inputs.file(buildFile)
+    doLast {
+        val content = buildFile.readText()
+        check(!content.lowercase().contains("snakeyaml")) {
+            "FARCH-010 DEFENSIVE SCAN FAILED: resource-model/build.gradle.kts must not contain " +
+                "'snakeyaml'. ADR-0021 requires resource-model to be YAML-library-agnostic."
+        }
+        println("FARCH-010 defensive scan PASSED: no snakeyaml token in resource-model/build.gradle.kts")
+    }
+}
+
+tasks.named("check") {
+    dependsOn(farch010DefensiveScan)
+}
