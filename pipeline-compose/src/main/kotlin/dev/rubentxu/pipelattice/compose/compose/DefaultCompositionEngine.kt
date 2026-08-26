@@ -130,9 +130,20 @@ internal class DefaultCompositionEngine(
         val profileParams: MutableMap<String, ParameterNode> = mutableMapOf()
         val profileProvenance: MutableMap<String, MutableList<Provenance>> = mutableMapOf()
 
+        // Track whether we're processing the first (directly referenced) profile vs imports
+        var isFirstProfile = true
+
         for ((index, resource) in profileResources.withIndex()) {
             if (resource !is PipelineProfileResource) continue
-            val layer = if (index == 0) Layer.PROFILE else Layer.PROFILE_IMPORT
+            val layer = if (isFirstProfile) Layer.PROFILE else Layer.PROFILE_IMPORT
+
+            // For the first profile, use the original profileRef to preserve full path with version
+            // For subsequent imported profiles, use the resource metadata name
+            val sourceRef = if (isFirstProfile) {
+                profileRef
+            } else {
+                ResourceRef.parse("catalog://${resource.metadata.name}")
+            }
 
             for ((key, paramDecl) in resource.spec.parameters.entries) {
                 val effectiveValue = paramDecl.default
@@ -146,17 +157,19 @@ internal class DefaultCompositionEngine(
                             key = key,
                             layer = layer,
                             source = ProvenanceSource(
-                                resource = ResourceRef.parse("catalog://${resource.metadata.name}"),
-                                location = SourceLocation(path = resource.metadata.name)
+                                resource = sourceRef,
+                                location = SourceLocation(path = sourceRef.canonicalForm)
                             ),
                             transformations = listOf(
-                                Transformation(kind = Transformation.PROVIDED_BY, detail = "profile default")
+                                Transformation(kind = Transformation.IMPORTED_BY, detail = "imported")
                             ),
                             effectiveValue = effectiveValue
                         )
                     )
                 }
             }
+
+            isFirstProfile = false
         }
 
         // Step 4: Bind profile parameters with overrides
