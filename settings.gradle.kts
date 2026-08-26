@@ -26,3 +26,5 @@ include(":resource-model")
 include(":config-compiler")
 // M2 — Composition core slice (PR#1: scaffold + diagnostic codes snapshot).
 include(":pipeline-compose")
+// M4 — Policy engine module (A-min: domain types, port, no-op impl, FARCH-012).
+include(":policy-engine")
