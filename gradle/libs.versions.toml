@@ -1,14 +1,17 @@
 [versions]
 kotlin = "2.4.10"
 archunit = "1.5.0"
+snakeyaml-engine = "3.1.1"
 
 [libraries]
 kotlin-gradle-plugin = { module = "org.jetbrains.kotlin:kotlin-gradle-plugin", version.ref = "kotlin" }
 archunit-junit5 = { module = "com.tngtech.archunit:archunit-junit5", version.ref = "archunit" }
+snakeyaml-engine = { module = "org.snakeyaml:snakeyaml-engine", version.ref = "snakeyaml-engine" }
 
 [plugins]
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
 
 # Planned entries (adopted per spike outcome, do not pin until the corresponding spike closes):
-# - YAML adapter: S-002 compares KAML/kotlinx.serialization vs SnakeYAML Engine vs Jackson.
-# - kotlinx-coroutines / kotlinx-serialization: introduced with the first ports/adapters (M1+).
+# - kotlinx-serialization: reserved for the canonical plan protocol (M10 / S-010), NOT for
+#   source YAML parsing (see docs/adr/ADR-0021-yaml-adapter.md).
+# - kotlinx-coroutines: introduced with the first ports/adapters that perform I/O (M1+).

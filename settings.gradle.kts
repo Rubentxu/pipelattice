@@ -17,8 +17,10 @@ rootProject.name = "pipelattice"
 
 enableFeaturePreview("TYPESAFE_PROJECT_ACCESSORS")
 
-// M0 — Foundation & Architecture Harness.
+// M0/M1 — Foundation, Architecture Harness and first resource slice.
 // New modules are added here as they gain real content (see docs/adr and pipelattice-spec/docs/08_ROADMAP.md).
 include(":foundation")
 include(":testkit")
 include(":architecture-tests")
+include(":resource-model")
+include(":config-compiler")
