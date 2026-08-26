@@ -32,3 +32,5 @@ include(":policy-engine")
 include(":build-engine")
 // M6 — Gradle abstraction proof: second provider, FARCH-014, gaps-report.
 include(":provider-gradle")
+// M7 — Reactive Configuration Graph V1 shell (GraphProjectionStore + InMemory + diff + fingerprint + FARCH-015).
+include(":graph-projection")
