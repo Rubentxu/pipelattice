@@ -1,0 +1,21 @@
+apiVersion: pipelattice.dev/v1alpha1
+kind: PolicySet
+metadata:
+  name: security-standard
+  version: 7.0.0
+spec:
+  rules:
+    - id: image-scan-required
+      target: workflow.capabilities
+      assert:
+        contains: quality.scan
+      governance:
+        mode: mandatory
+    - id: java-minimum
+      when:
+        taxonomy.language: java
+      target: parameters.javaVersion
+      assert:
+        min: 21
+      governance:
+        mode: guardrail

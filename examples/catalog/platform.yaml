@@ -1,0 +1,24 @@
+apiVersion: pipelattice.dev/v1alpha1
+kind: PlatformDescriptor
+metadata:
+  name: corporate-platform
+spec:
+  providers:
+    project.build:
+      - id: maven
+        version: "1"
+      - id: gradle
+        version: "1"
+      - id: dotnet
+        version: "1"
+    image.build:
+      - id: buildkit
+        version: "1"
+    deployment.deploy:
+      - id: helm
+        version: "1"
+  artifactRepositories:
+    releases:
+      type: maven
+      endpoint: https://nexus.example/repository/releases
+      credentialsRef: secret://nexus/releases

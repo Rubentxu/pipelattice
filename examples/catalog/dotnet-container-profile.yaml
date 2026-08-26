@@ -1,0 +1,14 @@
+apiVersion: pipelattice.dev/v1alpha1
+kind: PipelineProfile
+metadata:
+  name: dotnet-container
+  version: 2.0.0
+spec:
+  imports:
+    - ref: catalog://company/base@3
+    - ref: catalog://language/dotnet@4
+    - ref: catalog://build/dotnet@3
+    - ref: catalog://security/standard@7
+    - ref: catalog://packaging/container@6
+  workflow:
+    ref: catalog://workflows/build-container@3

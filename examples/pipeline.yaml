@@ -1,0 +1,17 @@
+apiVersion: pipelattice.dev/v1alpha1
+kind: PipelineDefinition
+metadata:
+  name: payments-api
+  labels:
+    domain: payments
+    criticality: high
+spec:
+  profile:
+    ref: catalog://profiles/java-maven-container@stable
+  parameters:
+    javaVersion: 21
+  patches:
+    - target: workflow.stages[id=test]
+      op: merge
+      value:
+        timeout: 30m

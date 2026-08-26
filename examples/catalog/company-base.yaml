@@ -1,0 +1,14 @@
+apiVersion: pipelattice.dev/v1alpha1
+kind: ConfigurationFragment
+metadata:
+  name: company-base
+  version: 3.1.0
+spec:
+  defaults:
+    timeouts:
+      operation: 20m
+  governance:
+    diagnostics:
+      failOnUnknownFields:
+        value: true
+        mode: mandatory

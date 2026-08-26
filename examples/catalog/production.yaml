@@ -1,0 +1,11 @@
+apiVersion: pipelattice.dev/v1alpha1
+kind: EnvironmentDescriptor
+metadata:
+  name: production
+spec:
+  class: production
+  deployment:
+    runtime: kubernetes
+  requiredPolicies:
+    - security/production
+    - supply-chain/signed-artifacts
