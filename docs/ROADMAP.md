@@ -9,6 +9,20 @@ _None — next milestone (M3+) will be defined when triggered by user request._
 
 ## Recently Closed Milestones
 
+- **m3-debt-cleanup** — Status: completed — Closed cycle
+  `p-4c8272c9e7dcdfa2/m3-debt-cleanup`, sequence=35, ledger=35 events,
+  runtime CLOSED on 2026-08-26. Path: **A-min** (smoke debt-verify). Tag
+  `v0.2.1-m3-cleanup` peels to `b394590` on main (4 commits over base
+  `cdb63b9`, 195/0/0 tests workspace, 108/0/0 tests in `:pipeline-compose`,
+  6/6 REQ COMPLIANT, debt verdict PASS — 0 introduced, 3 pre-existing
+  remediated, FIND-000007 deferred to future cycle). Removed unused
+  `diagnostics: ProvenanceSink` param (FIND-000001), deleted unused
+  `ImportResolver.ResolveResult` (FIND-000002), decomposed `compose()` 195→55
+  LOC into 4 named helpers (FIND-000003), centralized wireName literals
+  (FIND-000005), inlined `flattenParams` pass-through (FIND-000006). Added
+  `/.sddk/` to `.gitignore` for ADR-0011 defense. Cycle artifacts in
+  `~/.local/share/sddk/projects/p-4c8272c9e7dcdfa2/cycle-artifacts/p-4c8272c9e7dcdfa2/m3-debt-cleanup/`.
+
 - **m2-composition-core** — Status: completed — Closed cycle
   `p-4c8272c9e7dcdfa2/m2-composition-core`, sequence=28, ledger=28 events,
   runtime CLOSED on 2026-08-26. Path: **A-full**. Tag `v0.2.0-m2` peels to
