@@ -159,5 +159,26 @@ class ArchitectureFitnessTest {
         rule.because("build-engine must not depend on ProcessBuilder, Runtime.exec, or System.getenv (FARCH-013)").check(imported)
     }
 
+    @ArchTest
+    fun `FARCH-014 - provider-gradle is ProcessBuilder and Runtime dot exec free`(imported: JavaClasses) {
+        val rule = noClasses()
+            .that().resideInAPackage("dev.rubentxu.pipelattice.provider.gradle..")
+            .should().dependOnClassesThat()
+            .resideInAnyPackage(
+                "java.lang.ProcessBuilder..",
+                "java.lang.Runtime..",
+                "java.lang.Process..",
+                "kotlin.system..",
+                "org.apache.tools.ant.taskdefs.Execute..",
+            )
+        rule.allowEmptyShould(true)
+        rule.because(
+            "provider-gradle must execute gradle processes only via the ProcessRunner port " +
+                "consumed from :build-engine (FARCH-014); direct ProcessBuilder use would " +
+                "violate the abstraction proof and break provider substitution (ADR-0001, " +
+                "S-012 kill condition: no when(provider) in application core)",
+        ).check(imported)
+    }
+
     private fun rule(definition: ArchRule, because: String): ArchRule = definition.because(because)
 }
