@@ -30,10 +30,14 @@ public sealed interface CommandResult {
      * @property exitCode The numeric exit code of the subprocess.
      * @property stdout Standard output of the subprocess.
      * @property stderr Standard error of the subprocess.
+     * @property signal POSIX signal number (1-31) if the process was terminated by a signal, null otherwise.
+     * @property durationMs Wall-clock duration of the command in milliseconds.
      */
     public data class Failed(
         public val exitCode: Int,
         public val stdout: String,
         public val stderr: String,
+        public val signal: Int? = null,
+        public val durationMs: Long = 0L,
     ) : CommandResult
 }

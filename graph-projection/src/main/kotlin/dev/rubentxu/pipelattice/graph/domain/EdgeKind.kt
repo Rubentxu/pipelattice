@@ -22,4 +22,42 @@ public sealed interface EdgeKind {
     public data object OVERRIDES : EdgeKind
 
     public data object PATCHES : EdgeKind
+
+    // A-lite additions (spec 04 §4)
+    public data object DERIVED_FROM : EdgeKind
+
+    public data object USES : EdgeKind
+
+    public data object REQUIRES : EdgeKind
+
+    public data object PROVIDES : EdgeKind
+
+    public data object GOVERNED_BY : EdgeKind
+
+    public data object TARGETS : EdgeKind
+
+    public data object PRODUCES : EdgeKind
+
+    public data object CONSUMES : EdgeKind
+
+    public data object COMPILES_TO : EdgeKind
+
+    public companion object {
+        public fun all(): Set<EdgeKind> = setOf(
+            IMPORTS,
+            EXTENDS,
+            SELECTS,
+            OVERRIDES,
+            PATCHES,
+            DERIVED_FROM,
+            USES,
+            REQUIRES,
+            PROVIDES,
+            GOVERNED_BY,
+            TARGETS,
+            PRODUCES,
+            CONSUMES,
+            COMPILES_TO,
+        )
+    }
 }

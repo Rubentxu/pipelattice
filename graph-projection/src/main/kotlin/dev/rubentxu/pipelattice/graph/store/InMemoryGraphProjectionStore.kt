@@ -30,11 +30,19 @@ public class InMemoryGraphProjectionStore : GraphProjectionStore {
 
     private val edges: LinkedHashSet<Edge> = LinkedHashSet()
 
+    /**
+     * Tracks the number of apply() calls for invalidation purposes.
+     * AdjacencyIndex uses this to detect stale caches.
+     */
+    internal var applyVersion: Long = 0L
+        private set
+
     override fun apply(changeSet: GraphChangeSet) {
         // Remove first, then add — so "add wins" semantics hold even when
         // the same edge is in both lists.
         changeSet.removedEdges.forEach(edges::remove)
         changeSet.addedEdges.forEach(edges::add)
+        applyVersion++
     }
 
     override fun snapshot(): GraphSnapshot {
