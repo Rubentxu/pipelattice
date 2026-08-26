@@ -308,27 +308,30 @@ class YamlResourceParserTest {
     // -------------------------------------------------------------------------
 
     @Test
-    fun `bad indent produces RESOURCE-YAML-001 with line 3`() {
-        // Note: line 3 is the "  profile:" line (1-based)
+    fun `tab indent produces RESOURCE-YAML-001 with line 6`() {
+        // Genuinely invalid YAML: tab character used for indentation (YAML 1.1 §4.3 forbids tabs).
+        // SnakeYAML Engine v2 throws MarkedYamlEngineException; problemMark.line+1 = 6 (1-based).
         val yaml = """
             apiVersion: pipelattice.dev/v1alpha1
             kind: PipelineDefinition
             metadata:
               name: bad-indent-example
             spec:
-             profile:
+        \t\tprofile:
                 ref: catalog://profiles/test@stable
         """.trimIndent()
 
         val result = parser.parse(SourceDocument("test.yaml", yaml))
 
-        assertTrue(result.hasErrors)
+        assertTrue(result.hasErrors, "expected parse errors but got none: ${result.diagnostics}")
         assertTrue(result.resources.isEmpty())
         val error = result.diagnostics.firstOrNull { it.code.value == "RESOURCE-YAML-001" }
         assertNotNull(error, "expected RESOURCE-YAML-001 but got: ${result.diagnostics.map { it.code.value }}")
         val loc = error.location
         assertNotNull(loc, "expected location to be present")
-        assertEquals(3, loc.line)
+        // Tab on line 7 causes SnakeYAML to report the error at the enclosing
+        // block context Mark: line 6 (0-based=5 → 1-based=6).
+        assertEquals(6, loc.line)
     }
 
     @Test
