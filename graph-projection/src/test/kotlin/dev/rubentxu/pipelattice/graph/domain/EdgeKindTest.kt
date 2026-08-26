@@ -35,6 +35,15 @@ class EdgeKindTest {
             EdgeKind.SELECTS -> "selects"
             EdgeKind.OVERRIDES -> "overrides"
             EdgeKind.PATCHES -> "patches"
+            EdgeKind.DERIVED_FROM -> "derived_from"
+            EdgeKind.USES -> "uses"
+            EdgeKind.REQUIRES -> "requires"
+            EdgeKind.PROVIDES -> "provides"
+            EdgeKind.GOVERNED_BY -> "governed_by"
+            EdgeKind.TARGETS -> "targets"
+            EdgeKind.PRODUCES -> "produces"
+            EdgeKind.CONSUMES -> "consumes"
+            EdgeKind.COMPILES_TO -> "compiles_to"
         }
         assertEquals("imports", result)
     }
