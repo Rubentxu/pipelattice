@@ -19,22 +19,13 @@ import dev.rubentxu.pipelattice.resource.ResourceParser
  * by following import references in depth-first order.
  *
  * @param maxDepth Maximum import chain depth before triggering IMPORT-001 (default: 8).
- *                The chain includes the starting profile, so depth=8 means 8 profiles in the chain.
+ *               The chain includes the starting profile, so depth=8 means 8 profiles in the chain.
  * @param parser The resource parser for converting source documents to parsed resources.
  */
 internal class ImportResolver(
     private val maxDepth: Int = 8,
     private val parser: ResourceParser,
 ) {
-
-    /**
-     * Result of resolving an import chain, containing the collected resources and cycle info.
-     */
-    internal data class ResolveResult(
-        val resources: List<ParsedResource>,
-        val cycleChain: List<String> = emptyList(),
-        val hitMaxDepth: Boolean = false,
-    )
 
     /**
      * Resolves a starting profile reference to a list of all reachable profiles.
