@@ -5,9 +5,31 @@ Execution roadmap for SDDK cycles. Canonical milestone definitions live in
 
 ## Active Milestones
 
-_None — next milestone (M6+ slices) will be defined when triggered by user request._
+_None — next milestone (M7+ slices) will be defined when triggered by user request._
 
 ## Recently Closed Milestones
+
+- **m7-reactive-graph** — Status: completed — Closed cycle
+  `p-4c8272c9e7dcdfa2/m7-reactive-graph`, sequence=66, ledger=66 events,
+  runtime CLOSED on 2026-08-26. Path: **A-min** (smoke debt-verify). Tag
+  `v0.6.0-m7-reactive-graph` peels to `e4651f1` on main (6 commits over base
+  `ef3a97e`, 274/0/0 tests workspace, 21 tests in `:graph-projection`,
+  5/5 REQ COMPLIANT, FARCH-015 active with PROOF). New Gradle module
+  `:graph-projection` delivers M6 Reactive Configuration Graph V1 shell only:
+  domain types `GraphNode` (5 sealed variants: Project, Component,
+  PipelineProfile, ConfigSource, ResolvedPipelinePlan) + `EdgeKind` (5 data
+  objects: IMPORTS, EXTENDS, SELECTS, OVERRIDES, PATCHES — rest 9 deferred
+  A-lite) + `Edge` + `GraphChangeSet` + `GraphSnapshot` + `PlanFingerprint`
+  (SHA-256 value class, 64-char hex invariant) + `StructuralDiff` with
+  companion `diff()`, port `GraphProjectionStore` (apply + snapshot per spec
+  01 §6), impl `InMemoryGraphProjectionStore` (LinkedHashSet + canonical
+  sort + remove-then-add last-writer-wins + deterministic SHA-256
+  fingerprint). **M6 Decision Gate Verdict (V1): PASS** per spec 04 §6 —
+  declared dependencies, in-memory persistence only, no read tracing (V3
+  future), no configuration compiler integration (deferred A-lite). 5 gaps
+  documented (1 LOW docsync, 3 MEDIUM A-lite deferrals, 1 HIGH A-lite when
+  compiler integrates). Cycle artifacts in
+  `~/.local/share/sddk/projects/p-4c8272c9e7dcdfa2/cycle-artifacts/p-4c8272c9e7dcdfa2/m7-reactive-graph/`.
 
 - **m6-gradle-abstraction-proof** — Status: completed — Closed cycle
   `p-4c8272c9e7dcdfa2/m6-gradle-abstraction-proof`, sequence=57, ledger=57
