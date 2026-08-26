@@ -8,6 +8,7 @@ import dev.rubentxu.pipelattice.build.domain.TestProjectRequest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
 
 /**
  * Verifies that the build ports are properly declared and can be compiled against.
@@ -60,5 +61,13 @@ class ProcessRunnerInterfaceTest {
         assertEquals(1, typeParams.size)
         assertEquals("A", typeParams[0].name)
         assertEquals(BuildArtifact::class.java, typeParams[0].bounds.firstOrNull())
+    }
+
+    @Test
+    fun `ProjectModel is sealed interface with at least 3 variants`() {
+        val projectModelClass = ProjectModel::class
+        assertTrue(projectModelClass.isSealed, "ProjectModel must be sealed")
+        val nestedClasses = projectModelClass.java.declaredClasses
+        assertTrue(nestedClasses.size >= 3, "ProjectModel must have at least 3 nested classes (sealed variants)")
     }
 }
