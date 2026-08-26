@@ -1,0 +1,14 @@
+[versions]
+kotlin = "2.4.10"
+archunit = "1.5.0"
+
+[libraries]
+kotlin-gradle-plugin = { module = "org.jetbrains.kotlin:kotlin-gradle-plugin", version.ref = "kotlin" }
+archunit-junit5 = { module = "com.tngtech.archunit:archunit-junit5", version.ref = "archunit" }
+
+[plugins]
+kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
+
+# Planned entries (adopted per spike outcome, do not pin until the corresponding spike closes):
+# - YAML adapter: S-002 compares KAML/kotlinx.serialization vs SnakeYAML Engine vs Jackson.
+# - kotlinx-coroutines / kotlinx-serialization: introduced with the first ports/adapters (M1+).
