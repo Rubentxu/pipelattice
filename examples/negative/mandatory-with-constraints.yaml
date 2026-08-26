@@ -1,0 +1,14 @@
+apiVersion: pipelattice.dev/v1alpha1
+kind: PipelineProfile
+metadata:
+  name: test-profile
+spec:
+  parameters:
+    javaVersion:
+      type: integer
+      default: 21
+      governance:
+        mode: mandatory
+        constraints:
+          min: 17
+          max: 26

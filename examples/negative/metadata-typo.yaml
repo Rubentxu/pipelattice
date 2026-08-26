@@ -1,0 +1,8 @@
+apiVersion: pipelattice.dev/v1alpha1
+kind: PipelineDefinition
+metadata:
+  name: test
+  namme: typo-value
+spec:
+  profile:
+    ref: catalog://profiles/test@stable

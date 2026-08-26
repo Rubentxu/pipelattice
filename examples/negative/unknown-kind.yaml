@@ -1,0 +1,7 @@
+apiVersion: pipelattice.dev/v1alpha1
+kind: UnknownResourceKind
+metadata:
+  name: test
+spec:
+  profile:
+    ref: catalog://profiles/test@stable

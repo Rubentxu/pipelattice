@@ -1,0 +1,7 @@
+apiVersion: pipelattice.dev/v1alpha1
+kind: PipelineDefinition
+metadata:
+  name: test
+spec:
+  profile:
+    ref: https://example.com/foo

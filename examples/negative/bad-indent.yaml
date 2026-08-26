@@ -1,0 +1,7 @@
+apiVersion: pipelattice.dev/v1alpha1
+kind: PipelineDefinition
+metadata:
+  name: bad-indent-example
+spec:
+ profile:
+    ref: catalog://profiles/test@stable

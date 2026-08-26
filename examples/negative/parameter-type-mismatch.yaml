@@ -1,0 +1,9 @@
+apiVersion: pipelattice.dev/v1alpha1
+kind: PipelineProfile
+metadata:
+  name: test-profile
+spec:
+  parameters:
+    javaVersion:
+      type: integer
+      default: "should-be-int"
