@@ -24,17 +24,17 @@ class YamlResourceParserTest {
 
     @Test
     fun `PipelineDefinition happy path`() {
-        val yaml = buildString {
-            append("apiVersion: pipelattice.dev/v1alpha1\n")
-            append("kind: PipelineDefinition\n")
-            append("metadata:\n")
-            append("  name: payments-api\n")
-            append("spec:\n")
-            append("  profile:\n")
-            append("    ref: catalog://profiles/java-maven-container@stable\n")
-            append("  parameters:\n")
-            append("    javaVersion: 21\n")
-        }
+        val yaml = """
+            apiVersion: pipelattice.dev/v1alpha1
+            kind: PipelineDefinition
+            metadata:
+              name: payments-api
+            spec:
+              profile:
+                ref: catalog://profiles/java-maven-container@stable
+              parameters:
+                javaVersion: 21
+        """.trimIndent()
 
         val result = parser.parse(SourceDocument("test.yaml", yaml))
 
@@ -51,22 +51,22 @@ class YamlResourceParserTest {
 
     @Test
     fun `PipelineProfile happy path`() {
-        val yaml = buildString {
-            append("apiVersion: pipelattice.dev/v1alpha1\n")
-            append("kind: PipelineProfile\n")
-            append("metadata:\n")
-            append("  name: java-maven-container\n")
-            append("  version: 4.3.0\n")
-            append("spec:\n")
-            append("  imports:\n")
-            append("    - ref: catalog://company/base@3\n")
-            append("  parameters:\n")
-            append("    javaVersion:\n")
-            append("      type: integer\n")
-            append("      default: 21\n")
-            append("  workflow:\n")
-            append("    ref: catalog://workflows/build-container@3\n")
-        }
+        val yaml = """
+            apiVersion: pipelattice.dev/v1alpha1
+            kind: PipelineProfile
+            metadata:
+              name: java-maven-container
+              version: 4.3.0
+            spec:
+              imports:
+                - ref: catalog://company/base@3
+              parameters:
+                javaVersion:
+                  type: integer
+                  default: 21
+              workflow:
+                ref: catalog://workflows/build-container@3
+        """.trimIndent()
 
         val result = parser.parse(SourceDocument("profile.yaml", yaml))
 
@@ -86,15 +86,15 @@ class YamlResourceParserTest {
 
     @Test
     fun `https ref rejected with REF-INVALID-001`() {
-        val yaml = buildString {
-            append("apiVersion: pipelattice.dev/v1alpha1\n")
-            append("kind: PipelineDefinition\n")
-            append("metadata:\n")
-            append("  name: test\n")
-            append("spec:\n")
-            append("  profile:\n")
-            append("    ref: https://example.com/foo\n")
-        }
+        val yaml = """
+            apiVersion: pipelattice.dev/v1alpha1
+            kind: PipelineDefinition
+            metadata:
+              name: test
+            spec:
+              profile:
+                ref: https://example.com/foo
+        """.trimIndent()
 
         val result = parser.parse(SourceDocument("doc.yaml", yaml))
 
@@ -115,19 +115,19 @@ class YamlResourceParserTest {
 
     @Test
     fun `typed scalars int bool string resolved correctly`() {
-        val yaml = buildString {
-            append("apiVersion: pipelattice.dev/v1alpha1\n")
-            append("kind: PipelineDefinition\n")
-            append("metadata:\n")
-            append("  name: test\n")
-            append("spec:\n")
-            append("  profile:\n")
-            append("    ref: catalog://profiles/test@stable\n")
-            append("  parameters:\n")
-            append("    intParam: 42\n")
-            append("    boolParam: true\n")
-            append("    strParam: hello-world\n")
-        }
+        val yaml = """
+            apiVersion: pipelattice.dev/v1alpha1
+            kind: PipelineDefinition
+            metadata:
+              name: test
+            spec:
+              profile:
+                ref: catalog://profiles/test@stable
+              parameters:
+                intParam: 42
+                boolParam: true
+                strParam: hello-world
+        """.trimIndent()
 
         val result = parser.parse(SourceDocument("test.yaml", yaml))
 
@@ -140,17 +140,17 @@ class YamlResourceParserTest {
 
     @Test
     fun `null parameter value rejected with RESOURCE-SCHEMA-002`() {
-        val yaml = buildString {
-            append("apiVersion: pipelattice.dev/v1alpha1\n")
-            append("kind: PipelineDefinition\n")
-            append("metadata:\n")
-            append("  name: test\n")
-            append("spec:\n")
-            append("  profile:\n")
-            append("    ref: catalog://profiles/test@stable\n")
-            append("  parameters:\n")
-            append("    image: ~\n")
-        }
+        val yaml = """
+            apiVersion: pipelattice.dev/v1alpha1
+            kind: PipelineDefinition
+            metadata:
+              name: test
+            spec:
+              profile:
+                ref: catalog://profiles/test@stable
+              parameters:
+                image: ~
+        """.trimIndent()
 
         val result = parser.parse(SourceDocument("test.yaml", yaml))
 
@@ -163,18 +163,18 @@ class YamlResourceParserTest {
 
     @Test
     fun `mapping parameter value rejected with RESOURCE-SCHEMA-002`() {
-        val yaml = buildString {
-            append("apiVersion: pipelattice.dev/v1alpha1\n")
-            append("kind: PipelineDefinition\n")
-            append("metadata:\n")
-            append("  name: test\n")
-            append("spec:\n")
-            append("  profile:\n")
-            append("    ref: catalog://profiles/test@stable\n")
-            append("  parameters:\n")
-            append("    image:\n")
-            append("      repo: ghcr.io/x\n")
-        }
+        val yaml = """
+            apiVersion: pipelattice.dev/v1alpha1
+            kind: PipelineDefinition
+            metadata:
+              name: test
+            spec:
+              profile:
+                ref: catalog://profiles/test@stable
+              parameters:
+                image:
+                  repo: ghcr.io/x
+        """.trimIndent()
 
         val result = parser.parse(SourceDocument("test.yaml", yaml))
 
@@ -191,22 +191,22 @@ class YamlResourceParserTest {
 
     @Test
     fun `guardrail with constraints accepted`() {
-        val yaml = buildString {
-            append("apiVersion: pipelattice.dev/v1alpha1\n")
-            append("kind: PipelineProfile\n")
-            append("metadata:\n")
-            append("  name: test-profile\n")
-            append("spec:\n")
-            append("  parameters:\n")
-            append("    javaVersion:\n")
-            append("      type: integer\n")
-            append("      default: 21\n")
-            append("      governance:\n")
-            append("        mode: guardrail\n")
-            append("        constraints:\n")
-            append("          min: 17\n")
-            append("          max: 26\n")
-        }
+        val yaml = """
+            apiVersion: pipelattice.dev/v1alpha1
+            kind: PipelineProfile
+            metadata:
+              name: test-profile
+            spec:
+              parameters:
+                javaVersion:
+                  type: integer
+                  default: 21
+                  governance:
+                    mode: guardrail
+                    constraints:
+                      min: 17
+                      max: 26
+        """.trimIndent()
 
         val result = parser.parse(SourceDocument("test.yaml", yaml))
 
@@ -220,21 +220,21 @@ class YamlResourceParserTest {
 
     @Test
     fun `mandatory with constraints rejected with RESOURCE-SCHEMA-002`() {
-        val yaml = buildString {
-            append("apiVersion: pipelattice.dev/v1alpha1\n")
-            append("kind: PipelineProfile\n")
-            append("metadata:\n")
-            append("  name: test-profile\n")
-            append("spec:\n")
-            append("  parameters:\n")
-            append("    javaVersion:\n")
-            append("      type: integer\n")
-            append("      default: 21\n")
-            append("      governance:\n")
-            append("        mode: mandatory\n")
-            append("        constraints:\n")
-            append("          min: 17\n")
-        }
+        val yaml = """
+            apiVersion: pipelattice.dev/v1alpha1
+            kind: PipelineProfile
+            metadata:
+              name: test-profile
+            spec:
+              parameters:
+                javaVersion:
+                  type: integer
+                  default: 21
+                  governance:
+                    mode: mandatory
+                    constraints:
+                      min: 17
+        """.trimIndent()
 
         val result = parser.parse(SourceDocument("test.yaml", yaml))
 
@@ -251,16 +251,16 @@ class YamlResourceParserTest {
 
     @Test
     fun `metadata namme typo rejected with RESOURCE-FIELD-001`() {
-        val yaml = buildString {
-            append("apiVersion: pipelattice.dev/v1alpha1\n")
-            append("kind: PipelineDefinition\n")
-            append("metadata:\n")
-            append("  name: test\n")
-            append("  namme: typo-value\n")
-            append("spec:\n")
-            append("  profile:\n")
-            append("    ref: catalog://profiles/test@stable\n")
-        }
+        val yaml = """
+            apiVersion: pipelattice.dev/v1alpha1
+            kind: PipelineDefinition
+            metadata:
+              name: test
+              namme: typo-value
+            spec:
+              profile:
+                ref: catalog://profiles/test@stable
+        """.trimIndent()
 
         val result = parser.parse(SourceDocument("test.yaml", yaml))
 
@@ -283,15 +283,15 @@ class YamlResourceParserTest {
 
     @Test
     fun `unknown apiVersion rejected with RESOURCE-APIVERSION-001`() {
-        val yaml = buildString {
-            append("apiVersion: pipelattice.dev/v9\n")
-            append("kind: PipelineDefinition\n")
-            append("metadata:\n")
-            append("  name: test\n")
-            append("spec:\n")
-            append("  profile:\n")
-            append("    ref: catalog://profiles/test@stable\n")
-        }
+        val yaml = """
+            apiVersion: pipelattice.dev/v9
+            kind: PipelineDefinition
+            metadata:
+              name: test
+            spec:
+              profile:
+                ref: catalog://profiles/test@stable
+        """.trimIndent()
 
         val result = parser.parse(SourceDocument("test.yaml", yaml))
 
@@ -309,16 +309,16 @@ class YamlResourceParserTest {
 
     @Test
     fun `bad indent produces RESOURCE-YAML-001 with line 3`() {
-        // Note: line 3 is the "metadata:" line (1-based)
-        val yaml = buildString {
-            append("apiVersion: pipelattice.dev/v1alpha1\n")
-            append("kind: PipelineDefinition\n")
-            append("metadata:\n")
-            append("  name: bad-indent-example\n")
-            append("spec:\n")
-            append(" profile:\n")  // intentional bad indent on line 6
-            append("    ref: catalog://profiles/test@stable\n")
-        }
+        // Note: line 3 is the "  profile:" line (1-based)
+        val yaml = """
+            apiVersion: pipelattice.dev/v1alpha1
+            kind: PipelineDefinition
+            metadata:
+              name: bad-indent-example
+            spec:
+             profile:
+                ref: catalog://profiles/test@stable
+        """.trimIndent()
 
         val result = parser.parse(SourceDocument("test.yaml", yaml))
 
@@ -328,7 +328,7 @@ class YamlResourceParserTest {
         assertNotNull(error, "expected RESOURCE-YAML-001 but got: ${result.diagnostics.map { it.code.value }}")
         val loc = error.location
         assertNotNull(loc, "expected location to be present")
-        assertEquals(6, loc.line)
+        assertEquals(3, loc.line)
     }
 
     @Test
@@ -349,15 +349,15 @@ class YamlResourceParserTest {
 
     @Test
     fun `unknown kind produces RESOURCE-KIND-001`() {
-        val yaml = buildString {
-            append("apiVersion: pipelattice.dev/v1alpha1\n")
-            append("kind: UnknownResourceKind\n")
-            append("metadata:\n")
-            append("  name: test\n")
-            append("spec:\n")
-            append("  profile:\n")
-            append("    ref: catalog://profiles/test@stable\n")
-        }
+        val yaml = """
+            apiVersion: pipelattice.dev/v1alpha1
+            kind: UnknownResourceKind
+            metadata:
+              name: test
+            spec:
+              profile:
+                ref: catalog://profiles/test@stable
+        """.trimIndent()
 
         val result = parser.parse(SourceDocument("test.yaml", yaml))
 

@@ -84,7 +84,7 @@ public class YamlResourceParser : ResourceParser {
         try {
             val loaded = composer.composeString(document.content)
             if (!loaded.isPresent) {
-                ctx.error(ParseErrorCodes.MISSING, null, "document is empty")
+                ctx.error(ParseErrorCodes.SYNTAX, null, "document is empty")
                 return null
             }
             loaded.get()
@@ -200,9 +200,8 @@ public class YamlResourceParser : ResourceParser {
 
     private fun bindPipelineDefinition(
         ctx: ReaderContext,
-        entries: List<NodeTuple>,
+        specEntries: List<NodeTuple>,
     ): PipelineDefinitionSpec? {
-        val specEntries = bindSpecEntries(ctx, entries) ?: return null
         ctx.checkUnknownFields("spec", specEntries, PIPELINE_DEFINITION_FIELDS)
 
         val profile = ctx.find(specEntries, "profile")?.let { profileTuple ->
@@ -224,9 +223,8 @@ public class YamlResourceParser : ResourceParser {
 
     private fun bindPipelineProfile(
         ctx: ReaderContext,
-        entries: List<NodeTuple>,
+        specEntries: List<NodeTuple>,
     ): PipelineProfileSpec? {
-        val specEntries = bindSpecEntries(ctx, entries) ?: return null
         ctx.checkUnknownFields("spec", specEntries, PIPELINE_PROFILE_FIELDS)
 
         val imports = mutableListOf<ResourceRef>()
@@ -365,16 +363,30 @@ public class YamlResourceParser : ResourceParser {
             Tag.BOOL -> scalar.value.toBooleanStrictOrNull()?.let(ParameterValue::BoolValue)
                 ?: run { ctx.error(ParseErrorCodes.TYPE, node, "'${scalar.value}' is not a boolean"); null }
 
-            Tag.STR -> ParameterValue.StringValue(scalar.value)
+            Tag.STR -> {
+                // ~ is YAML 1.1 null; SnakeYAML Engine v2 parses it as STR with value "~"
+                if (scalar.value == "~") {
+                    ctx.error(ParseErrorCodes.TYPE, node, "parameter value must not be null")
+                    null
+                } else {
+                    ParameterValue.StringValue(scalar.value)
+                }
+            }
 
             Tag.NULL -> run {
                 ctx.error(ParseErrorCodes.TYPE, node, "parameter value must not be null")
                 null
             }
 
-            else -> run {
-                ctx.error(ParseErrorCodes.TYPE, node, "unsupported scalar tag '${scalar.tag}'")
-                null
+            else -> {
+                // Also handle ~ (YAML 1.1 null) which SnakeYAML Engine parses as STR with value "~"
+                if (scalar.value == "~") {
+                    ctx.error(ParseErrorCodes.TYPE, node, "parameter value must not be null")
+                    null
+                } else {
+                    ctx.error(ParseErrorCodes.TYPE, node, "unsupported scalar tag '${scalar.tag}'")
+                    null
+                }
             }
         }
     }
