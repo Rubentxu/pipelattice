@@ -25,9 +25,30 @@ kotlin {
 
 tasks.withType<Test>().configureEach {
     useJUnitPlatform()
+    // Inner-loop speed: distribute tests across JVMs (TDD iterations stay fast as suites grow).
+    maxParallelForks = (Runtime.getRuntime().availableProcessors() / 2).coerceAtLeast(1)
+    // Anti-hang net: no test blocks the suite forever (integration/process tests later on).
+    systemProperty("junit.jupiter.execution.timeout.default", "1m")
     testLogging {
         events("failed")
         showExceptions = true
         showStackTraces = true
+    }
+}
+
+// Tag contract: unit tests are untagged and run in the default `test` task;
+// slow/integration tests MUST be tagged "slow" and run via `slowTest`.
+tasks.named<Test>("test") {
+    useJUnitPlatform {
+        excludeTags("slow")
+    }
+}
+
+tasks.register<Test>("slowTest") {
+    useJUnitPlatform {
+        includeTags("slow")
+    }
+    testLogging {
+        events("passed", "failed")
     }
 }
