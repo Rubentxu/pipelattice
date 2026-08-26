@@ -1,0 +1,50 @@
+{
+  "cycle": "p-4c8272c9e7dcdfa2/m1-resource-yaml-slice",
+  "branch": "feat/m1-resource-yaml-slice",
+  "head": "848af90",
+  "timestamp": "2026-08-26T15:40:00Z",
+  "phase": "apply",
+  "correction_round": 1,
+  "tasks": [
+    {
+      "id": "9a85bdd4",
+      "requirement": "REQ-Golden-Fixture-Determinism",
+      "priority": "CRITICAL",
+      "status": "done",
+      "artifact": "config-compiler/src/test/kotlin/dev/rubentxu/pipelattice/compiler/parse/FixtureDeterminismTest.kt",
+      "commits": ["1652169"]
+    },
+    {
+      "id": "7db0efc3",
+      "requirement": "REQ-Stable-Diagnostic-Codes",
+      "priority": "HIGH",
+      "status": "done",
+      "artifact": "config-compiler/src/test/kotlin/dev/rubentxu/pipelattice/compiler/parse/DiagnosticCodesTest.kt",
+      "commits": ["1652169"]
+    },
+    {
+      "id": "91019c7c",
+      "requirement": "FARCH-010 RED evidence capture",
+      "priority": "MEDIUM",
+      "status": "done",
+      "artifact": ".atl/cycles/p-4c8272c9e7dcdfa2/m1-resource-yaml-slice/farch010-red.txt",
+      "commits": ["848af90"]
+    },
+    {
+      "id": "e1476af44",
+      "requirement": "Close apply phase",
+      "priority": "CRITICAL",
+      "status": "done",
+      "artifact": ".atl/cycles/p-4c8272c9e7dcdfa2/m1-resource-yaml-slice/apply-checkpoint.json",
+      "commits": ["848af90"]
+    }
+  ],
+  "total_tasks": 4,
+  "tasks_done": 4,
+  "tasks_blocked": 0,
+  "commits_in_cycle": 14,
+  "new_commits_this_round": 2,
+  "tests_total": 17,
+  "tests_passed": 17,
+  "build_status": "green"
+}
