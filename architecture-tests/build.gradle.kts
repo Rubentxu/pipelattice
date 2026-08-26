@@ -15,6 +15,7 @@ dependencies {
     testImplementation(projects.policyEngine)
     testImplementation(projects.buildEngine)
     testImplementation(projects.providerGradle)
+    testImplementation(projects.graphProjection)
     testImplementation(libs.archunit.junit5)
 }
 
@@ -142,4 +143,33 @@ val farch014DefensiveScan by tasks.registering {
 
 tasks.named("check") {
     dependsOn(farch014DefensiveScan)
+}
+
+/**
+ * FARCH-015 defensive scan: verify graph-projection/build.gradle.kts does not contain
+ * forbidden dependency tokens (jgrapht, neo4j, hibernate, room, orientdb, jpa).
+ * This guards against reintroducing graph-database or ORM deps at the build level,
+ * complementary to the ArchUnit bytecode check.
+ */
+val farch015DefensiveScan by tasks.registering {
+    val buildFile = rootProject.file("graph-projection/build.gradle.kts")
+    inputs.file(buildFile)
+    doLast {
+        val content = buildFile.readText()
+        val forbiddenTokens = listOf(
+            "jgrapht", "neo4j", "tinkerpop", "orientdb", "orient",
+            "hibernate", "room", "jpa", "persistence",
+        )
+        val foundTokens = forbiddenTokens.filter { content.lowercase().contains(it) }
+        check(foundTokens.isEmpty()) {
+            "FARCH-015 DEFENSIVE SCAN FAILED: graph-projection/build.gradle.kts must not " +
+                "contain forbidden dependency tokens: ${foundTokens.joinToString()}. " +
+                "FARCH-015 requires :graph-projection to be in-memory only (V1, ADR-0014)."
+        }
+        println("FARCH-015 defensive scan PASSED: no forbidden tokens in graph-projection/build.gradle.kts")
+    }
+}
+
+tasks.named("check") {
+    dependsOn(farch015DefensiveScan)
 }

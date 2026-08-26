@@ -180,5 +180,32 @@ class ArchitectureFitnessTest {
         ).check(imported)
     }
 
+    @ArchTest
+    fun `FARCH-015 - graph-projection is graph-DB and ORM free`(imported: JavaClasses) {
+        val rule = noClasses()
+            .that().resideInAPackage("dev.rubentxu.pipelattice.graph..")
+            .should().dependOnClassesThat()
+            .resideInAnyPackage(
+                // Graph databases
+                "org.jgrapht..",
+                "org.neo4j..",
+                "com.tinkerpop..",
+                "com.orientechnologies..",
+                // ORMs (would imply persistent storage)
+                "jakarta.persistence..",
+                "javax.persistence..",
+                "org.hibernate..",
+                "androidx.room..",
+                "android.arch.persistence.room..",
+            )
+        rule.allowEmptyShould(true)
+        rule.because(
+            "graph-projection must be in-memory only (V1 per spec 04 §11 + ADR-0014); " +
+                "any graph-database or ORM dependency would violate the V1 persistence " +
+                "decision and pre-commit to scale that has not been measured. SHA-256 + " +
+                "java.util collections are sufficient for V1 (FARCH-015).",
+        ).check(imported)
+    }
+
     private fun rule(definition: ArchRule, because: String): ArchRule = definition.because(because)
 }
