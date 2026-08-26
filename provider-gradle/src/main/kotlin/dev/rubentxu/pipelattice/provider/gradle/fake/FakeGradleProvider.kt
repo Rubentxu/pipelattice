@@ -48,8 +48,10 @@ public class FakeGradleProvider(
             is dev.rubentxu.pipelattice.build.domain.CommandResult.Success -> {
                 Outcome.Success(
                     GradleProjectModel(
-                        gradleVersion = "8.5",
-                        rootDir = request.workingDirectory,
+                        id = "${request.workingDirectory}",
+                        group = "dev.rubentxu.pipelattice",
+                        name = request.workingDirectory.fileName.toString(),
+                        version = "8.5",
                     ),
                 )
             }
