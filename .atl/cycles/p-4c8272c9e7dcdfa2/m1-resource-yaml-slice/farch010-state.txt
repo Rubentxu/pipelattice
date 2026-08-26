@@ -1,0 +1,34 @@
+Reusing configuration cache.
+> Task :architecture-tests:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :foundation:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :testkit:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :resource-model:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :foundation:processResources NO-SOURCE
+> Task :architecture-tests:processResources NO-SOURCE
+> Task :resource-model:processResources NO-SOURCE
+> Task :testkit:processResources NO-SOURCE
+> Task :architecture-tests:processTestResources NO-SOURCE
+> Task :architecture-tests:compileKotlin NO-SOURCE
+> Task :architecture-tests:compileJava NO-SOURCE
+> Task :architecture-tests:classes UP-TO-DATE
+> Task :architecture-tests:jar UP-TO-DATE
+> Task :foundation:compileKotlin UP-TO-DATE
+> Task :foundation:compileJava NO-SOURCE
+> Task :foundation:classes UP-TO-DATE
+> Task :foundation:jar UP-TO-DATE
+> Task :testkit:compileKotlin UP-TO-DATE
+> Task :resource-model:compileKotlin UP-TO-DATE
+> Task :testkit:compileJava NO-SOURCE
+> Task :testkit:classes UP-TO-DATE
+> Task :resource-model:compileJava NO-SOURCE
+> Task :resource-model:classes UP-TO-DATE
+> Task :testkit:jar UP-TO-DATE
+> Task :resource-model:jar UP-TO-DATE
+> Task :architecture-tests:compileTestKotlin UP-TO-DATE
+> Task :architecture-tests:compileTestJava NO-SOURCE
+> Task :architecture-tests:testClasses UP-TO-DATE
+> Task :architecture-tests:test UP-TO-DATE
+
+BUILD SUCCESSFUL in 967ms
+9 actionable tasks: 9 up-to-date
+Configuration cache entry reused.
