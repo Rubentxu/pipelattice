@@ -34,3 +34,5 @@ include(":build-engine")
 include(":provider-gradle")
 // M7 — Reactive Configuration Graph V1 shell (GraphProjectionStore + InMemory + diff + fingerprint + FARCH-015).
 include(":graph-projection")
+// M9 — Fleet candidate diff orchestrator (FleetCandidateDiff + FleetDiffReport + SnapshotRepository + CLI).
+include(":fleet-diff")
