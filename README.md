@@ -82,8 +82,10 @@ Local verification is the gate: `./gradlew build` runs the same checks CI does.
 | `foundation` | Identity value types and the diagnostics model with stable error codes |
 | `testkit` | Shared test utilities (diagnostic sinks, future fakes) |
 | `architecture-tests` | Architecture fitness rules enforced with ArchUnit |
+| `resource-model` | Typed resource envelope, value classes for identity, governance and parameter types |
+| `config-compiler` | YAML parse adapter (SnakeYAML Engine); only module that knows about YAML |
 
-Planned modules follow the milestone order above (`resource-model`, `config-compiler`, `workflow-model`, `capabilities-api`, `policy-engine`, `graph-projection`, providers, `cli`). New modules are only registered when they contain real content.
+Future modules (`workflow-model`, `capabilities-api`, `policy-engine`, `graph-projection`, providers, `cli`) follow the milestone order and are only registered when they contain real content.
 
 ## Documentation
 

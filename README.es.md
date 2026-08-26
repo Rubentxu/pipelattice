@@ -82,8 +82,10 @@ La verificación local es la puerta: `./gradlew build` ejecuta las mismas compro
 | `foundation` | Tipos de identidad (value classes) y modelo de diagnostics con códigos de error estables |
 | `testkit` | Utilidades de test compartidas (sinks de diagnósticos, fakes futuros) |
 | `architecture-tests` | Reglas fitness de arquitectura aplicadas con ArchUnit |
+| `resource-model` | Envelope de recursos tipado, value classes para identidad, governance y tipos de parámetros |
+| `config-compiler` | Adaptador de parseo YAML (SnakeYAML Engine); único módulo que conoce YAML |
 
-Los módulos planificados siguen el orden de hitos anterior (`resource-model`, `config-compiler`, `workflow-model`, `capabilities-api`, `policy-engine`, `graph-projection`, providers, `cli`). Los módulos nuevos solo se registran cuando contienen código real.
+Los módulos futuros (`workflow-model`, `capabilities-api`, `policy-engine`, `graph-projection`, providers, `cli`) siguen el orden de hitos y solo se registran cuando contienen código real.
 
 ## Documentación
 
