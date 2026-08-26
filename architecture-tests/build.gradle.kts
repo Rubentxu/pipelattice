@@ -12,6 +12,7 @@ dependencies {
     testImplementation(projects.testkit)
     testImplementation(projects.resourceModel)
     testImplementation(projects.pipelineCompose)
+    testImplementation(projects.policyEngine)
     testImplementation(libs.archunit.junit5)
 }
 
@@ -61,4 +62,30 @@ val farch011DefensiveScan by tasks.registering {
 
 tasks.named("check") {
     dependsOn(farch011DefensiveScan)
+}
+
+/**
+ * FARCH-012 defensive scan: verify policy-engine/build.gradle.kts does not contain
+ * forbidden dependency tokens (snakeyaml, kaml, jackson, gson, jgit, serialization).
+ * This guards against reintroducing YAML/JSON/GIT/serialization library deps
+ * at the build level, complementary to the ArchUnit bytecode check.
+ */
+val farch012DefensiveScan by tasks.registering {
+    val buildFile = rootProject.file("policy-engine/build.gradle.kts")
+    inputs.file(buildFile)
+    doLast {
+        val content = buildFile.readText()
+        val forbiddenTokens = listOf("snakeyaml", "kaml", "jackson", "gson", "jgit", "serialization")
+        val foundTokens = forbiddenTokens.filter { content.lowercase().contains(it) }
+        check(foundTokens.isEmpty()) {
+            "FARCH-012 DEFENSIVE SCAN FAILED: policy-engine/build.gradle.kts must not contain " +
+                "forbidden dependency tokens: ${foundTokens.joinToString()}. " +
+                "FARCH-012 requires policy-engine to be YAML/JSON/GIT/serialization-library-agnostic."
+        }
+        println("FARCH-012 defensive scan PASSED: no forbidden tokens in policy-engine/build.gradle.kts")
+    }
+}
+
+tasks.named("check") {
+    dependsOn(farch012DefensiveScan)
 }

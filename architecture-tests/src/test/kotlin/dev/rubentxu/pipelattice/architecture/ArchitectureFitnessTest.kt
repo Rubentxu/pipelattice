@@ -126,5 +126,22 @@ class ArchitectureFitnessTest {
         rule.because("pipeline-compose must not depend on YAML, JSON, GIT, or serialization libraries (FARCH-011)").check(imported)
     }
 
+    @ArchTest
+    fun `FARCH-012 - policy-engine is YAML JSON GIT serialization-free`(imported: JavaClasses) {
+        val rule = noClasses()
+            .that().resideInAPackage("dev.rubentxu.pipelattice.policy..")
+            .should().dependOnClassesThat()
+            .resideInAnyPackage(
+                "org.snakeyaml..",
+                "com.charleskorn.kaml..",
+                "com.fasterxml.jackson..",
+                "com.google.gson..",
+                "org.eclipse.jgit..",
+                "kotlinx.serialization..",
+            )
+        rule.allowEmptyShould(true)
+        rule.because("policy-engine must not depend on YAML, JSON, GIT, or serialization libraries (FARCH-012)").check(imported)
+    }
+
     private fun rule(definition: ArchRule, because: String): ArchRule = definition.because(because)
 }
