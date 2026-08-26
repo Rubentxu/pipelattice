@@ -1,0 +1,25 @@
+name: CI
+
+# Per repo policy, local execution of this pipeline is the gate during development.
+# GitHub Actions mirrors it as documentation and protects main.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+
+      - name: Build and test
+        run: ./gradlew build --stacktrace
