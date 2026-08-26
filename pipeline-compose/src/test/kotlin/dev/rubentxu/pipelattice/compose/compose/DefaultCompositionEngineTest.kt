@@ -3,6 +3,7 @@ package dev.rubentxu.pipelattice.compose.compose
 import dev.rubentxu.pipelattice.compose.domain.CompositionRequest
 import dev.rubentxu.pipelattice.compose.domain.CompositionResult
 import dev.rubentxu.pipelattice.compose.domain.ExplainResult
+import dev.rubentxu.pipelattice.compose.domain.Layer
 import dev.rubentxu.pipelattice.compose.ports.CatalogSource
 import dev.rubentxu.pipelattice.compose.ports.ProvenanceSink
 import dev.rubentxu.pipelattice.foundation.ResourceRef
@@ -218,10 +219,10 @@ class DefaultCompositionEngineTest {
         )
     }
 
-    // --- Explain throws NotImplementedError in Phase 5 ---
+    // --- Explain tests ---
 
     @Test
-    fun `explain throws NotImplementedError in Phase 5`() {
+    fun `explain returns Hit for existing key`() {
         val parser = MockParser(emptyMap())
         val importResolver = ImportResolver(parser = parser)
         val mergeEngine = MergeEngine()
@@ -229,7 +230,56 @@ class DefaultCompositionEngineTest {
         val fingerprint = FingerprintComputer
         val engine = DefaultCompositionEngine(importResolver, mergeEngine, parameterBinder, fingerprint, parser)
 
-        val pipeline = pipelineDef("test-pipeline")
+        // Create provenance with a chain
+        val provenanceSource = dev.rubentxu.pipelattice.compose.domain.ProvenanceSource(
+            resource = ResourceRef.parse("catalog://payments-api"),
+            location = SourceLocation(path = "payments-api")
+        )
+        val transformation = dev.rubentxu.pipelattice.compose.domain.Transformation(
+            kind = dev.rubentxu.pipelattice.compose.domain.Transformation.PROVIDED_BY,
+            detail = "profile default"
+        )
+        val prov1 = dev.rubentxu.pipelattice.compose.domain.Provenance(
+            key = "timeout",
+            layer = Layer.PROFILE_IMPORT,
+            source = provenanceSource,
+            transformations = listOf(transformation),
+            effectiveValue = ParameterValue.IntValue(30)
+        )
+        val prov2 = dev.rubentxu.pipelattice.compose.domain.Provenance(
+            key = "timeout",
+            layer = Layer.LOCAL,
+            source = provenanceSource,
+            transformations = listOf(transformation),
+            effectiveValue = ParameterValue.IntValue(60)
+        )
+
+        val provenance = mapOf("timeout" to listOf(prov1, prov2))
+        val result = CompositionResult(
+            pipelineId = "test",
+            parameters = mapOf("timeout" to ParameterValue.IntValue(60)),
+            provenance = provenance,
+            fingerprint = "abc123"
+        )
+
+        val explainResult = engine.explain(result, "timeout")
+
+        assertIs<ExplainResult.Hit>(explainResult)
+        assertEquals(2, explainResult.chain.size)
+        // Chain should be root-to-leaf: PROFILE_IMPORT first, then LOCAL
+        assertEquals(Layer.PROFILE_IMPORT, explainResult.chain[0].layer)
+        assertEquals(Layer.LOCAL, explainResult.chain[1].layer)
+    }
+
+    @Test
+    fun `explain returns Miss for non-existing key`() {
+        val parser = MockParser(emptyMap())
+        val importResolver = ImportResolver(parser = parser)
+        val mergeEngine = MergeEngine()
+        val parameterBinder = ParameterBinder(DiagnosticSink {})
+        val fingerprint = FingerprintComputer
+        val engine = DefaultCompositionEngine(importResolver, mergeEngine, parameterBinder, fingerprint, parser)
+
         val result = CompositionResult(
             pipelineId = "test",
             parameters = emptyMap(),
@@ -237,9 +287,48 @@ class DefaultCompositionEngineTest {
             fingerprint = "abc123"
         )
 
-        val exception = kotlin.test.assertFailsWith<NotImplementedError> {
-            engine.explain(result, "some.path")
-        }
-        assertTrue(exception.message?.contains("Phase 6") == true)
+        val explainResult = engine.explain(result, "nonexistent")
+
+        assertIs<ExplainResult.Miss>(explainResult)
+    }
+
+    @Test
+    fun `explain parses nested path and returns last component`() {
+        val parser = MockParser(emptyMap())
+        val importResolver = ImportResolver(parser = parser)
+        val mergeEngine = MergeEngine()
+        val parameterBinder = ParameterBinder(DiagnosticSink {})
+        val fingerprint = FingerprintComputer
+        val engine = DefaultCompositionEngine(importResolver, mergeEngine, parameterBinder, fingerprint, parser)
+
+        val provenanceSource = dev.rubentxu.pipelattice.compose.domain.ProvenanceSource(
+            resource = ResourceRef.parse("catalog://profiles/java"),
+            location = SourceLocation(path = "profiles/java")
+        )
+        val transformation = dev.rubentxu.pipelattice.compose.domain.Transformation(
+            kind = dev.rubentxu.pipelattice.compose.domain.Transformation.PROVIDED_BY,
+            detail = "profile default"
+        )
+        val prov = dev.rubentxu.pipelattice.compose.domain.Provenance(
+            key = "timeout",
+            layer = Layer.PROFILE,
+            source = provenanceSource,
+            transformations = listOf(transformation),
+            effectiveValue = ParameterValue.IntValue(30)
+        )
+
+        val provenance = mapOf("timeout" to listOf(prov))
+        val result = CompositionResult(
+            pipelineId = "test",
+            parameters = mapOf("timeout" to ParameterValue.IntValue(30)),
+            provenance = provenance,
+            fingerprint = "abc123"
+        )
+
+        // Path "pipeline.stages.build" should look up "build" key
+        val explainResult = engine.explain(result, "pipeline.stages.build")
+
+        // Key "build" not found in provenance which only has "timeout"
+        assertIs<ExplainResult.Miss>(explainResult)
     }
 }

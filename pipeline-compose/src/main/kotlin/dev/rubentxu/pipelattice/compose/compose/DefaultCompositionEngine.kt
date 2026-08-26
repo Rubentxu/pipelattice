@@ -244,16 +244,74 @@ internal class DefaultCompositionEngine(
     /**
      * Explains how a specific key was resolved in a previous composition result.
      *
-     * Phase 6 implements the full explain functionality.
-     * This placeholder throws NotImplementedError.
+     * Parses the dotted [path] (e.g., "pipeline.stages.build"), looking for the key
+     * in [result]'s provenance map. Returns [ExplainResult.Hit] with the provenance chain
+     * ordered root-to-leaf if found, or [ExplainResult.Miss] if not found.
+     *
+     * Dotted path parsing respects escaped dots (\\.) so "pipeline.stages\.name" splits
+     * into ["pipeline", "stages.name"].
      *
      * @param result The composition result to explain.
      * @param path The dot-notation path to the key (e.g., "pipeline.stages.build").
-     * @return An [ExplainResult] describing the resolution.
-     * @throws NotImplementedError This method is not yet implemented.
+     * @return An [ExplainResult.Hit] with the chain if found, or [ExplainResult.Miss] if not.
      */
     override fun explain(result: CompositionResult, path: String): ExplainResult {
-        throw NotImplementedError("explain() will be implemented in Phase 6")
+        // Parse dotted path, respecting escaped dots (\\.)
+        val key = parseDottedPath(path)
+
+        // Look up the key in provenance
+        val chain = result.provenance[key]
+
+        return if (chain != null && chain.isNotEmpty()) {
+            // Return chain ordered root-to-leaf (already in order from composition)
+            ExplainResult.Hit(chain)
+        } else {
+            ExplainResult.Miss
+        }
+    }
+
+    /**
+     * Parses a dotted path, respecting escaped dots (\\.).
+     *
+     * Examples:
+     * - "pipeline.stages.build" → ["pipeline", "stages", "build"]
+     * - "pipeline.stages\.name" → ["pipeline", "stages.name"]
+     * - "simple" → ["simple"]
+     *
+     * @param path The dotted path to parse.
+     * @return The final key (last component of the path).
+     */
+    private fun parseDottedPath(path: String): String {
+        // Split by unescaped dots
+        // An escaped dot is "\." (backslash followed by dot)
+        val components = mutableListOf<String>()
+        var current = StringBuilder()
+        var i = 0
+
+        while (i < path.length) {
+            val char = path[i]
+            if (char == '\\' && i + 1 < path.length && path[i + 1] == '.') {
+                // Escaped dot - include the dot in the current component
+                current.append('.')
+                i += 2
+            } else if (char == '.') {
+                // Unescaped dot - separator
+                components.add(current.toString())
+                current = StringBuilder()
+                i++
+            } else {
+                current.append(char)
+                i++
+            }
+        }
+
+        // Add the last component
+        if (current.isNotEmpty() || path.isNotEmpty()) {
+            components.add(current.toString())
+        }
+
+        // Return the last component as the key
+        return components.lastOrNull() ?: path
     }
 
     /**
