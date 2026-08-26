@@ -175,7 +175,7 @@ class CompositionUAT001Test {
         val request = CompositionRequest(definition = pipeline)
 
         // Execute composition
-        val result = engine.compose(request, catalog, provenanceSink, provenanceSink)
+        val result = engine.compose(request, catalog, provenanceSink)
 
         // Assert 1: parameters["javaVersion"] == IntValue(25)
         val javaVersion = result.parameters["javaVersion"]
@@ -244,7 +244,7 @@ class CompositionUAT001Test {
 
         // Compute fingerprint 100 times and verify determinism
         val hashes = (1..100).map {
-            val result = engine.compose(request, catalog, provenanceSink, provenanceSink)
+            val result = engine.compose(request, catalog, provenanceSink)
             result.fingerprint
         }
 

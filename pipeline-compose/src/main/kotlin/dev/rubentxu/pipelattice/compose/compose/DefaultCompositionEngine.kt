@@ -54,7 +54,6 @@ internal class DefaultCompositionEngine(
      * @param request The composition request containing the pipeline definition and optional overrides.
      * @param catalog The catalog source for resolving imported resources.
      * @param provenance The provenance sink for recording resolution provenance.
-     * @param diagnostics The diagnostic sink (currently not used - diagnostics collected internally).
      * @return A [CompositionResult] containing the resolved pipeline parameters, provenance,
      *         fingerprint, and any diagnostics collected during composition.
      */
@@ -62,12 +61,62 @@ internal class DefaultCompositionEngine(
         request: CompositionRequest,
         catalog: CatalogSource,
         provenance: ProvenanceSink,
-        diagnostics: ProvenanceSink,
     ): CompositionResult {
         // Internal diagnostic collection
         val collectedDiagnostics = mutableListOf<Diagnostic>()
 
-        // Step 1: Validate request
+        // Validate request
+        validateRequest(request, collectedDiagnostics)
+
+        val profileRef = request.definition.spec.profile
+        if (profileRef == null) {
+            return buildCompositionResult(
+                pipelineId = request.definition.metadata.name,
+                parameters = request.definition.spec.parameters,
+                provenance = emptyMap(),
+                collectedDiagnostics = collectedDiagnostics
+            )
+        }
+
+        // Resolve and flatten profile chain
+        val (profileResources, profileParams, rawProfileProvenance) = resolveAndFlattenProfileChain(
+            profileRef, catalog, request, collectedDiagnostics
+        )
+
+        if (profileResources == null) {
+            // Merge conflict error - already recorded
+            return buildCompositionResult(
+                pipelineId = request.definition.metadata.name,
+                parameters = emptyMap(),
+                provenance = emptyMap(),
+                collectedDiagnostics = collectedDiagnostics
+            )
+        }
+
+        // Bind and merge parameters
+        val (finalParams, provenanceForFingerprint) = bindAndMergeParameters(
+            request, profileRef, profileResources, profileParams, provenance, collectedDiagnostics, rawProfileProvenance
+        )
+
+        // Emit provenance
+        for ((_, provList) in provenanceForFingerprint.entries) {
+            for (prov in provList) {
+                provenance.emit(prov)
+            }
+        }
+
+        return buildCompositionResult(
+            pipelineId = request.definition.metadata.name,
+            parameters = finalParams,
+            provenance = provenanceForFingerprint,
+            collectedDiagnostics = collectedDiagnostics
+        )
+    }
+
+    private fun validateRequest(
+        request: CompositionRequest,
+        collectedDiagnostics: MutableList<Diagnostic>,
+    ) {
         if (request.definition.metadata.name.isBlank()) {
             collectedDiagnostics.add(
                 Diagnostic(
@@ -77,35 +126,19 @@ internal class DefaultCompositionEngine(
                 )
             )
         }
+    }
 
-        // Step 2: Resolve profile imports
-        val profileRef = request.definition.spec.profile
-        if (profileRef == null) {
-            // No profile - just use local parameters
-            val params = request.definition.spec.parameters
-            val finalParams = flattenParams(params)
-
-            val computedFingerprint = fingerprint.compute(
-                parameters = finalParams,
-                provenance = emptyMap()
-            )
-
-            return CompositionResult(
-                pipelineId = request.definition.metadata.name,
-                parameters = finalParams,
-                provenance = emptyMap(),
-                fingerprint = computedFingerprint,
-                diagnostics = collectedDiagnostics.toList()
-            )
-        }
-
-        // Create a DiagnosticSink adapter that collects diagnostics
+    private fun resolveAndFlattenProfileChain(
+        profileRef: ResourceRef,
+        catalog: CatalogSource,
+        request: CompositionRequest,
+        collectedDiagnostics: MutableList<Diagnostic>,
+    ): Triple<List<dev.rubentxu.pipelattice.resource.ParsedResource>?, Map<String, ParameterNode>, MutableMap<String, MutableList<Provenance>>> {
         val diagnosticSink: dev.rubentxu.pipelattice.foundation.diagnostics.DiagnosticSink =
             dev.rubentxu.pipelattice.foundation.diagnostics.DiagnosticSink { diagnostic ->
                 collectedDiagnostics.add(diagnostic)
             }
 
-        // Resolve profile chain
         val profileResources: List<dev.rubentxu.pipelattice.resource.ParsedResource> = try {
             importResolver.resolve(profileRef, catalog, diagnosticSink)
         } catch (e: MergeEngine.MergeUnsupportedException) {
@@ -117,28 +150,18 @@ internal class DefaultCompositionEngine(
                     location = SourceLocation(path = e.path)
                 )
             )
-            return CompositionResult(
-                pipelineId = request.definition.metadata.name,
-                parameters = emptyMap(),
-                provenance = emptyMap(),
-                fingerprint = "",
-                diagnostics = collectedDiagnostics.toList()
+            return Triple<List<dev.rubentxu.pipelattice.resource.ParsedResource>?, Map<String, ParameterNode>, MutableMap<String, MutableList<Provenance>>>(
+                null, emptyMap(), mutableMapOf()
             )
         }
 
-        // Step 3: Flatten profile chain
         val profileParams: MutableMap<String, ParameterNode> = mutableMapOf()
         val profileProvenance: MutableMap<String, MutableList<Provenance>> = mutableMapOf()
-
-        // Track whether we're processing the first (directly referenced) profile vs imports
         var isFirstProfile = true
 
-        for ((index, resource) in profileResources.withIndex()) {
+        for (resource in profileResources) {
             if (resource !is PipelineProfileResource) continue
             val layer = if (isFirstProfile) Layer.PROFILE else Layer.PROFILE_IMPORT
-
-            // For the first profile, use the original profileRef to preserve full path with version
-            // For subsequent imported profiles, use the resource metadata name
             val sourceRef = if (isFirstProfile) {
                 profileRef
             } else {
@@ -148,9 +171,7 @@ internal class DefaultCompositionEngine(
             for ((key, paramDecl) in resource.spec.parameters.entries) {
                 val effectiveValue = paramDecl.default
                 if (effectiveValue != null) {
-                    val node = ParameterNode.ScalarNode(effectiveValue)
-                    profileParams[key] = node
-
+                    profileParams[key] = ParameterNode.ScalarNode(effectiveValue)
                     val provList = profileProvenance.getOrPut(key) { mutableListOf() }
                     provList.add(
                         Provenance(
@@ -168,11 +189,21 @@ internal class DefaultCompositionEngine(
                     )
                 }
             }
-
             isFirstProfile = false
         }
 
-        // Step 4: Bind profile parameters with overrides
+        return Triple(profileResources, profileParams, profileProvenance)
+    }
+
+    private fun bindAndMergeParameters(
+        request: CompositionRequest,
+        profileRef: ResourceRef,
+        profileResources: List<dev.rubentxu.pipelattice.resource.ParsedResource>,
+        profileParams: Map<String, ParameterNode>,
+        provenance: ProvenanceSink,
+        collectedDiagnostics: MutableList<Diagnostic>,
+        profileProvenance: MutableMap<String, MutableList<Provenance>>,
+    ): Pair<Map<String, ParameterValue>, Map<String, List<Provenance>>> {
         val pipelineRef = ResourceRef.parse("catalog://pipelines/${request.definition.metadata.name}")
         val profileDecls = profileResources
             .filterIsInstance<PipelineProfileResource>()
@@ -187,7 +218,7 @@ internal class DefaultCompositionEngine(
             pipelineRef = pipelineRef,
         )
 
-        // Convert bindings to parameter nodes with provenance
+        // Build bound params with provenance
         val boundParams: Map<String, ParameterNode> = bindingResult.bindings.mapValues { entry ->
             val (key, value) = entry
             val provList = profileProvenance.getOrPut(key) { mutableListOf() }
@@ -208,49 +239,37 @@ internal class DefaultCompositionEngine(
             ParameterNode.ScalarNode(value)
         }
 
-        // Step 5: Merge profile params with bound params (bound params are local override)
+        // Merge profile params with bound params (bound params are local override)
         val mergedParams: MutableMap<String, ParameterNode> = mutableMapOf()
-
-        // First, add all profile params
         for (entry in profileParams.entries) {
             val key = entry.key
-            val node = entry.value
-            val boundNode = boundParams[key]
-            if (boundNode != null) {
-                mergedParams[key] = boundNode
-            } else {
-                mergedParams[key] = node
-            }
+            mergedParams[key] = boundParams[key] ?: entry.value
         }
-
-        // Add any bound params that weren't in profile
         for (entry in boundParams.entries) {
-            val key = entry.key
-            if (key !in mergedParams) {
-                mergedParams[key] = entry.value
+            if (entry.key !in mergedParams) {
+                mergedParams[entry.key] = entry.value
             }
         }
 
-        // Step 6: Flatten to final parameter map
         val finalParams = flattenParamNodes(mergedParams)
-
-        // Emit provenance
-        for ((key, provList) in profileProvenance.entries) {
-            for (prov in provList) {
-                provenance.emit(prov)
-            }
-        }
-
-        // Step 7: Compute fingerprint
         val provenanceForFingerprint = profileProvenance.mapValues { it.value.toList() }
-        val computedFingerprint = fingerprint.compute(finalParams, provenanceForFingerprint)
 
+        return Pair(finalParams, provenanceForFingerprint)
+    }
+
+    private fun buildCompositionResult(
+        pipelineId: String,
+        parameters: Map<String, ParameterValue>,
+        provenance: Map<String, List<Provenance>>,
+        collectedDiagnostics: List<Diagnostic>,
+    ): CompositionResult {
+        val computedFingerprint = fingerprint.compute(parameters, provenance)
         return CompositionResult(
-            pipelineId = request.definition.metadata.name,
-            parameters = finalParams,
-            provenance = profileProvenance.mapValues { it.value.toList() },
+            pipelineId = pipelineId,
+            parameters = parameters,
+            provenance = provenance,
             fingerprint = computedFingerprint,
-            diagnostics = collectedDiagnostics.toList()
+            diagnostics = collectedDiagnostics
         )
     }
 
@@ -325,13 +344,6 @@ internal class DefaultCompositionEngine(
 
         // Return the last component as the key
         return components.lastOrNull() ?: path
-    }
-
-    /**
-     * Flattens a map of ParameterValues to a flat Map<String, ParameterValue>.
-     */
-    private fun flattenParams(params: Map<String, ParameterValue>): Map<String, ParameterValue> {
-        return params
     }
 
     /**

@@ -136,7 +136,7 @@ class DefaultCompositionEngineTest {
         val provenanceSink = NoOpProvenanceSink()
         val diagnosticsSink = NoOpProvenanceSink()
 
-        val result = engine.compose(request, catalog, provenanceSink, diagnosticsSink)
+        val result = engine.compose(request, catalog, provenanceSink)
 
         assertEquals("build-payments", result.pipelineId)
         assertEquals(30L, (result.parameters["timeout"] as ParameterValue.IntValue).value)
@@ -171,7 +171,7 @@ class DefaultCompositionEngineTest {
         val provenanceSink = NoOpProvenanceSink()
         val diagnosticsSink = NoOpProvenanceSink()
 
-        val result = engine.compose(request, catalog, provenanceSink, diagnosticsSink)
+        val result = engine.compose(request, catalog, provenanceSink)
 
         // timeout should be bound, optionalFlag should be absent (unbound)
         assertEquals(30L, (result.parameters["timeout"] as ParameterValue.IntValue).value)
@@ -210,13 +210,48 @@ class DefaultCompositionEngineTest {
         val provenanceSink = NoOpProvenanceSink()
         val diagnosticsSink = NoOpProvenanceSink()
 
-        val result = engine.compose(request, catalog, provenanceSink, diagnosticsSink)
+        val result = engine.compose(request, catalog, provenanceSink)
 
         // Should have IMPORT-001 diagnostic
         assertTrue(
             result.diagnostics.any { it.code.value == "COMPOSE-IMPORT-001" },
             "Expected IMPORT-001 diagnostic for import cycle. Got: ${result.diagnostics.map { it.code.value }}"
         )
+    }
+
+    // --- REQ-006: null profile uses local parameters only ---
+
+    @Test
+    fun `compose with null profile uses local parameters only`() {
+        // Pipeline with no profile reference, only local parameters
+        val pipeline = pipelineDef(
+            name = "local-only-pipeline",
+            profileRef = null,
+            parameters = mapOf("javaVersion" to ParameterValue.IntValue(25))
+        )
+        val request = CompositionRequest(definition = pipeline)
+        val provenanceSink = NoOpProvenanceSink()
+
+        val parser = MockParser(emptyMap())
+        val importResolver = ImportResolver(parser = parser)
+        val mergeEngine = MergeEngine()
+        val parameterBinder = ParameterBinder(DiagnosticSink {})
+        val fingerprint = FingerprintComputer
+        val engine = DefaultCompositionEngine(importResolver, mergeEngine, parameterBinder, fingerprint, parser)
+
+        val result = engine.compose(request, MockCatalog(emptySet()), provenanceSink)
+
+        // parameters should contain javaVersion with value 25
+        assertEquals(
+            ParameterValue.IntValue(25),
+            result.parameters["javaVersion"],
+            "javaVersion should be IntValue(25)"
+        )
+        // provenance should be empty (no profile)
+        assertTrue(result.provenance.isEmpty(), "provenance should be empty for null profile")
+        // fingerprint should be computed
+        assertTrue(result.fingerprint.isNotEmpty(), "fingerprint should be computed")
+        assertEquals(64, result.fingerprint.length, "fingerprint should be 64-char SHA-256 hex")
     }
 
     // --- Explain tests ---

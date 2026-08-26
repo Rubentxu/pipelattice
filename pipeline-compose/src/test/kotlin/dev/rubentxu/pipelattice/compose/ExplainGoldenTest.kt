@@ -167,7 +167,7 @@ class ExplainGoldenTest {
             )
         )
         val request = CompositionRequest(definition = pipeline)
-        val result = engine.compose(request, catalog, provenanceSink, provenanceSink)
+        val result = engine.compose(request, catalog, provenanceSink)
 
         // PRIMARY structural assertion: explain() returns Hit with correct chain
         val explainResult = engine.explain(result, "parameters.javaVersion")

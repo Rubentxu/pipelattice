@@ -35,7 +35,6 @@ public interface CompositionEngine {
      * @param request The composition request containing the pipeline definition and optional overrides.
      * @param catalog The catalog source for resolving imported resources.
      * @param provenance The provenance sink for recording resolution provenance.
-     * @param diagnostics The diagnostic sink for reporting composition errors and warnings.
      * @return A [CompositionResult] containing the resolved pipeline parameters, provenance,
      *         fingerprint, and any diagnostics collected during composition.
      */
@@ -43,7 +42,6 @@ public interface CompositionEngine {
         request: CompositionRequest,
         catalog: CatalogSource,
         provenance: ProvenanceSink,
-        diagnostics: ProvenanceSink,
     ): CompositionResult
 
     /**

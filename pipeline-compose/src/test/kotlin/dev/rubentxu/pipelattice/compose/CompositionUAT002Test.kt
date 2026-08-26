@@ -171,7 +171,7 @@ class CompositionUAT002Test {
         val request = CompositionRequest(definition = pipeline)
 
         // Execute composition
-        val result = engine.compose(request, catalog, provenanceSink, provenanceSink)
+        val result = engine.compose(request, catalog, provenanceSink)
 
         // Assert 1: parameters["dotnetVersion"] == StringValue("8.0")
         val dotnetVersion = result.parameters["dotnetVersion"]
