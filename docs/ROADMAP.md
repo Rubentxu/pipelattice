@@ -5,9 +5,21 @@ Execution roadmap for SDDK cycles. Canonical milestone definitions live in
 
 ## Active Milestones
 
-_None — next milestone (M3+) will be defined when triggered by user request._
+_None — next milestone (M4+ slices) will be defined when triggered by user request._
 
 ## Recently Closed Milestones
+
+- **m4-policy-engine** — Status: completed — Closed cycle
+  `p-4c8272c9e7dcdfa2/m4-policy-engine`, sequence=42, ledger=42 events,
+  runtime CLOSED on 2026-08-26. Path: **A-min** (smoke debt-verify). Tag
+  `v0.3.0-m4-policy-engine` peels to `e4423bc` on main (5 commits over base
+  `0d6de34`, 204/0/0 tests workspace, 8/0/0 tests in `:policy-engine`, 5/5 REQ
+  COMPLIANT, FARCH-012 active with PROOF). New Gradle module `:policy-engine`
+  delivers shell only: domain types `Policy` + `Rule` (sealed, 3 variants) +
+  `Decision` + `Severity` + `Violation`, port `PolicyEngine`, no-op impl
+  `DefaultPolicyEngine`, 3 frozen `DiagnosticCode`s (POLICY-RULE-001/002/003).
+  Integration with `:pipeline-compose` deferred to A-lite. Cycle artifacts in
+  `~/.local/share/sddk/projects/p-4c8272c9e7dcdfa2/cycle-artifacts/p-4c8272c9e7dcdfa2/m4-policy-engine/`.
 
 - **m3-debt-cleanup** — Status: completed — Closed cycle
   `p-4c8272c9e7dcdfa2/m3-debt-cleanup`, sequence=35, ledger=35 events,
