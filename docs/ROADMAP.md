@@ -5,9 +5,26 @@ Execution roadmap for SDDK cycles. Canonical milestone definitions live in
 
 ## Active Milestones
 
-_None — next milestone (M4+ slices) will be defined when triggered by user request._
+_None — next milestone (M5+ slices) will be defined when triggered by user request._
 
 ## Recently Closed Milestones
+
+- **m5-build-vertical-slice** — Status: completed — Closed cycle
+  `p-4c8272c9e7dcdfa2/m5-build-vertical-slice`, sequence=49, ledger=49 events,
+  runtime CLOSED on 2026-08-26. Path: **A-min** (smoke debt-verify). Tag
+  `v0.4.0-m5-build-vertical-slice` peels to `ab9945b` on main (5 commits over
+  base `1cbf3b5`, 242/0/0 tests workspace, 23 tests in `:build-engine`, 28 in
+  `:foundation` (+16 for Outcome), 5/5 REQ COMPLIANT, FARCH-013 active with
+  PROOF). New Gradle module `:build-engine` delivers shell only: domain types
+  `Command` + `CommandResult` (sealed) + `Executable` + `Argument` +
+  `EnvironmentKey` + `BuildArtifact` + `ProjectModel` + 3 request types, ports
+  `ProcessRunner` (suspend) + `ProjectInspector<P>` + `ProjectTester` +
+  `ProjectBuilder<A>`, test fixture `FakeProcessRunner` with FIFO scripted
+  queue + invocations(). Transversal addition to `:foundation`: `Outcome<S,F>`
+  sealed type with 6 extensions (map/getOrNull/getOrElse/onSuccess/onFailure/fold)
+  — non-breaking enabler for future capability ports. Maven/Gradle provider
+  implementations deferred to A-lite cycles. Cycle artifacts in
+  `~/.local/share/sddk/projects/p-4c8272c9e7dcdfa2/cycle-artifacts/p-4c8272c9e7dcdfa2/m5-build-vertical-slice/`.
 
 - **m4-policy-engine** — Status: completed — Closed cycle
   `p-4c8272c9e7dcdfa2/m4-policy-engine`, sequence=42, ledger=42 events,
