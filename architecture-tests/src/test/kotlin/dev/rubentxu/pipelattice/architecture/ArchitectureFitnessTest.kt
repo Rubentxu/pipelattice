@@ -108,5 +108,23 @@ class ArchitectureFitnessTest {
         ).check(imported)
     }
 
+    @ArchTest
+    fun `FARCH-011 - pipeline-compose is YAML JSON GIT serialization-free except M1CatalogSource`(imported: JavaClasses) {
+        val rule = noClasses()
+            .that().resideInAPackage("dev.rubentxu.pipelattice.compose..")
+            .and().resideOutsideOfPackage("dev.rubentxu.pipelattice.compose.compose..")
+            .should().dependOnClassesThat()
+            .resideInAnyPackage(
+                "org.snakeyaml..",
+                "com.charleskorn.kaml..",
+                "com.fasterxml.jackson..",
+                "com.google.gson..",
+                "org.eclipse.jgit..",
+                "kotlinx.serialization..",
+            )
+        rule.allowEmptyShould(true)
+        rule.because("pipeline-compose must not depend on YAML, JSON, GIT, or serialization libraries (FARCH-011)").check(imported)
+    }
+
     private fun rule(definition: ArchRule, because: String): ArchRule = definition.because(because)
 }
