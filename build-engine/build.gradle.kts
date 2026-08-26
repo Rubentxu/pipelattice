@@ -7,4 +7,5 @@ dependencies {
     api(projects.resourceModel)
     testImplementation(projects.testkit)
     testImplementation(kotlin("test"))
+    testImplementation(libs.kotlinx.coroutines.core)
 }

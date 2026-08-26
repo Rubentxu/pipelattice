@@ -22,7 +22,7 @@ package dev.rubentxu.pipelattice.build.domain
  * @property version Semantic version string.
  * @property classifier Optional classifier for variant artifacts.
  */
-public data class BuildArtifact(
+public open class BuildArtifact(
     public val group: String,
     public val name: String,
     public val version: String,
