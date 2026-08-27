@@ -297,11 +297,12 @@ class ArchitectureFitnessTest {
 
     // NOTE: The original ArchUnit FARCH-018 bytecode rule (haveNameMatching on class names) was a NO-OP.
     // It matched Java class FQNs, never string literals. Replaced by Farch018SecretIsolationTest
-    // which performs a real source-file scan using SecretLiteralScanner — the same logic as the
-    // releaseEngineSecretIsolationScan Gradle task, but testable and self-verifying.
+    // in this package which performs a real source-file scan using SecretLiteralScanner —
+    // testable, self-verifying, and covers all production surfaces. The scan logic lives in
+    // the test module (not production), keeping the scanner's regex constants out of reach.
     //
-    // The bytecode constraint (no class outside foundation.secret..) is retained as a separate
-    // note for documentation; the concrete enforcement is via the source scan below.
+    // Enforcement: Farch018SecretIsolationTest.kt — self-verify (kills no-op scanners) +
+    // production scan across release-engine and foundation/secret,capability directories.
 
     private fun rule(definition: ArchRule, because: String): ArchRule = definition.because(because)
 }

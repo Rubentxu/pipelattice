@@ -19,6 +19,7 @@ dependencies {
     testImplementation(projects.fleetDiff)
     testImplementation(projects.releaseEngine)
     testImplementation(libs.archunit.junit5)
+    testImplementation(kotlin("test"))
 }
 
 /**
