@@ -68,11 +68,26 @@ public class GitSnapshotRepository(
             .build()
 
         return try {
-            val objectId = repo.resolve(ref)
-                ?: return null // ref not found
+            // Detect ambiguous refs (branch + tag with same name) BEFORE resolving.
+            // JGit's Repository.resolve() in 6.10.1 silently picks one ref instead of
+            // throwing AmbiguousObjectException for the branch+tag case. The old
+            // subprocess git transport errored with "fatal: ambiguous argument" — exit
+            // code 2 in our CLI. Preserve that byte-identical behavior.
+            val refDatabase = repo.refDatabase
+            val matchingRefs = buildList {
+                addAll(refDatabase.getRefsByPrefix("refs/heads/", "refs/tags/", "refs/remotes/").filter {
+                    it.name.substringAfterLast('/') == ref
+                })
+            }
+            if (matchingRefs.size > 1) {
+                return null
+            }
 
             val revWalk = RevWalk(repo)
             try {
+                val objectId = repo.resolve(ref)
+                    ?: return null // ref not found
+
                 val commit = revWalk.parseCommit(objectId)
                 val sha = commit.name
                 val resolution = GitRefResolution.Resolved(sha)
