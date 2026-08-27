@@ -115,7 +115,7 @@ public class CompileAffectedValidator(
                 }
                 invalidPlans.add(
                     PlanReference(
-                        projectId = ResourceRef.parse("projects/${resource.metadata.name}"),
+                        projectId = ResourceRef("projects/${resource.metadata.name}"),
                         planDigest = planDigest,
                         diagnosticCode = "E-COMPOSE-AFFECTED-001",
                     )

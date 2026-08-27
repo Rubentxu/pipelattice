@@ -27,6 +27,7 @@ import org.eclipse.jgit.storage.file.FileRepositoryBuilder
 import org.eclipse.jgit.revwalk.RevWalk
 import java.io.IOException
 import java.nio.file.Path
+import java.security.MessageDigest
 
 /**
  * Result of loading a snapshot from a git repository, including the sources used.
@@ -165,9 +166,20 @@ public class GitSnapshotRepository(
                 val cacheKey = cache.key(sha, sources)
 
                 // Cache lookup — short-circuit on hit
+                // NOTE: v1 and v2 cache files have the same cache key (sha + inputHash)
+                // but different fingerprint values. We must validate the scheme to avoid
+                // returning a v1 cache entry when v2 is expected.
                 val cached = cache.get(cacheKey)
                 if (cached != null) {
-                    return LoadedSnapshot(cached, sources)
+                    // Verify this is a v2 snapshot (not stale v1). The v2 fingerprint
+                    // is computed as SHA-256("graph-content/v2:<sha>:<inputHash>").
+                    // If the cached fingerprint doesn't match the expected v2 fingerprint,
+                    // treat as cache miss to auto-invalidate m15 v1 cache files.
+                    val expectedV2Fingerprint = sha256Hex("graph-content/v2:${sha}:${SnapshotDiskCache.computeInputHash(sources)}")
+                    if (cached.fingerprint.value == expectedV2Fingerprint) {
+                        return LoadedSnapshot(cached, sources)
+                    }
+                    // Cache miss: stale v1 cache or fingerprint mismatch — recompute v2
                 }
 
                 // Cache miss — create snapshot via factory
@@ -223,13 +235,36 @@ public class GitSnapshotRepository(
             parsedSources.addAll(result.resources)
         }
 
-        // Build catalog from profile resources
+        // Build catalog from profile resources.
+        // CRITICAL: we must use the ORIGINAL SourceDocument content (with actual YAML),
+        // not empty strings. The SimpleRepositoryCatalogSource was incorrectly creating
+        // empty-content documents, which caused ImportResolver.resolve() to fail because
+        // the parser would fail on empty content and return null, breaking the import chain.
+        // Fix: build a map from profile metadata name -> original SourceDocument.
+        // Then derive the catalog ref from the source path: "profiles/java.yaml" -> "catalog://profiles/java".
+        // This catalog ref is what ImportResolver.resolve() will look up.
+        val sourceByMetadataName = mutableMapOf<String, SourceDocument>()
+        for (source in sources) {
+            val result = resourceParser.parse(source)
+            for (resource in result.resources) {
+                if (resource is PipelineProfileResource) {
+                    sourceByMetadataName[resource.metadata.name] = source
+                }
+            }
+        }
+
         val profileRefs = parsedSources
             .filterIsInstance<PipelineProfileResource>()
-            .associate {
-                dev.rubentxu.pipelattice.foundation.ResourceRef.parse("catalog://${it.metadata.name}") to
-                    SourceDocument("catalog://${it.metadata.name}", "")
+            .mapNotNull { profile ->
+                val originalSource = sourceByMetadataName[profile.metadata.name]
+                    ?: return@mapNotNull null
+                // Derive catalog ref from file path: "profiles/java.yaml" -> "catalog://profiles/java"
+                val catalogRef = dev.rubentxu.pipelattice.foundation.ResourceRef.parse(
+                    "catalog://${originalSource.path.removeSuffix(".yaml").removeSuffix(".yml")}"
+                )
+                catalogRef to originalSource
             }
+            .toMap()
 
         val catalogSource = SimpleRepositoryCatalogSource(profileRefs)
 
@@ -248,6 +283,16 @@ public class GitSnapshotRepository(
         }
 
         return allEdges
+    }
+
+    /**
+     * Computes SHA-256 hex string for a given input string.
+     * Used for fingerprint computation to validate cached snapshots.
+     */
+    private fun sha256Hex(input: String): String {
+        val digest = MessageDigest.getInstance("SHA-256")
+        val hashBytes = digest.digest(input.toByteArray(Charsets.UTF_8))
+        return hashBytes.joinToString("") { "%02x".format(it) }
     }
 }
 

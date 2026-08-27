@@ -76,6 +76,39 @@ class FleetDiffJsonEncoderTest {
         assertTrue(parsed.containsKey("localOverrides"))
     }
 
+    /**
+     * F-02r — diagnosticCode encoder assertion.
+     *
+     * Verifies that when invalidPlans contains a PlanReference with non-null diagnosticCode,
+     * the JSON output includes the "diagnosticCode" field (line 109-111 of FleetDiffJsonEncoder).
+     * This closes the test gap identified in verify-report-r2.md F-02r.
+     */
+    @Test
+    fun `encode emits diagnosticCode field when PlanReference has non-null diagnosticCode`() {
+        val report = FleetDiffReport(
+            affectedProjects = emptySet(),
+            effectiveChanges = emptyList(),
+            invalidPlans = setOf(
+                PlanReference(
+                    projectId = ResourceRef("projects/example"),
+                    planDigest = "abc123",
+                    diagnosticCode = "E-COMPOSE-AFFECTED-001"
+                )
+            ),
+            newPolicyViolations = emptyList(),
+            resolvedPolicyViolations = emptyList(),
+            providerChanges = emptyList(),
+            localOverrides = emptyList(),
+        )
+
+        val json = FleetDiffJsonEncoder.encode(report)
+
+        // Verify diagnosticCode is present in the JSON
+        assertContains(json, "\"diagnosticCode\":\"E-COMPOSE-AFFECTED-001\"")
+        // Verify the full invalidPlans entry structure
+        assertContains(json, "\"invalidPlans\":[{\"projectId\":\"catalog://projects/example\",\"planDigest\":\"abc123\",\"diagnosticCode\":\"E-COMPOSE-AFFECTED-001\"}]")
+    }
+
     private fun jsonToMap(json: String): Map<String, Any> {
         // Simple JSON parser for test assertions
         val result = mutableMapOf<String, Any>()
