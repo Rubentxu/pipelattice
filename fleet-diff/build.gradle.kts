@@ -1,5 +1,10 @@
 plugins {
     id("pipelattice.kotlin-jvm")
+    application
+}
+
+application {
+    mainClass.set("dev.rubentxu.pipelattice.fleet.diff.cli.MainKt")
 }
 
 dependencies {
