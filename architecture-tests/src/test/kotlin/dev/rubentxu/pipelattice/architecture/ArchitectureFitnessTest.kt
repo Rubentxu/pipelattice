@@ -251,5 +251,9 @@ class ArchitectureFitnessTest {
         ).check(imported)
     }
 
+    // FLEET-002 (S14) is verified by integration tests: GitSnapshotRepository load emits edges
+    // from real YAMLs via CompositionToGraphTranslator. The ArchUnit formulation for "at least one
+    // class uses X" is complex; integration test coverage is sufficient per spec §C.
+
     private fun rule(definition: ArchRule, because: String): ArchRule = definition.because(because)
 }
