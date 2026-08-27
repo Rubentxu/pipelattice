@@ -1,9 +1,13 @@
 package dev.rubentxu.pipelattice.fleet.diff.cli
 
+import dev.rubentxu.pipelattice.compiler.parse.YamlResourceParser
+import dev.rubentxu.pipelattice.compose.createCompositionEngine
+import dev.rubentxu.pipelattice.fleet.diff.domain.CompileAffectedValidator
 import dev.rubentxu.pipelattice.fleet.diff.domain.FleetCandidateDiff
 import dev.rubentxu.pipelattice.fleet.diff.json.FleetDiffJsonEncoder
 import dev.rubentxu.pipelattice.fleet.diff.repository.GitSnapshotRepository
 import dev.rubentxu.pipelattice.fleet.diff.repository.InMemorySnapshotRepository
+import dev.rubentxu.pipelattice.fleet.diff.repository.LoadedSnapshot
 import dev.rubentxu.pipelattice.graph.domain.GraphSnapshot
 import dev.rubentxu.pipelattice.graph.domain.PlanFingerprint
 import dev.rubentxu.pipelattice.graph.store.InMemoryGraphProjectionStore
@@ -100,27 +104,37 @@ public object Main {
         val repoPath = extract(args, "--repo") ?: "."
 
         val repo: InMemorySnapshotRepository
+        val candidateSources: List<dev.rubentxu.pipelattice.resource.SourceDocument>?
         if (repoPath == ".") {
             // Identity path: store synthetic snapshots at traditional "baseline"/"candidate" keys
             // User-provided refs are used for LOADING, not storing
             repo = InMemorySnapshotRepository()
             storeSynthetic(repo)
+            candidateSources = null
         } else {
             // Git path: use GitSnapshotRepository to resolve refs via git CLI
             val gitRepo = GitSnapshotRepository(Path.of(repoPath))
             repo = InMemorySnapshotRepository()
             // Load baseline and candidate from git and store in the in-memory repo
-            val baselineSnap = gitRepo.load(baselineRef)
+            val baselineLoaded = gitRepo.loadWithSources(baselineRef)
                 ?: throw IllegalArgumentException("Baseline snapshot not found: $baselineRef")
-            val candidateSnap = gitRepo.load(candidateRef)
+            val candidateLoaded = gitRepo.loadWithSources(candidateRef)
                 ?: throw IllegalArgumentException("Candidate snapshot not found: $candidateRef")
-            repo.store(baselineRef, baselineSnap)
-            repo.store(candidateRef, candidateSnap)
+            repo.store(baselineRef, baselineLoaded.snapshot)
+            repo.store(candidateRef, candidateLoaded.snapshot)
+            candidateSources = candidateLoaded.sources
         }
 
         val store = InMemoryGraphProjectionStore()
 
-        val report = FleetCandidateDiff(repo, store).diff(baselineRef, candidateRef)
+        // Create the compile-affected validator with a real composition engine
+        // so that the PRIMARY signal can detect composition failures
+        val resourceParser = YamlResourceParser()
+        val compositionEngine = createCompositionEngine(resourceParser)
+        val compileAffectedValidator = CompileAffectedValidator(compositionEngine, resourceParser)
+
+        val report = FleetCandidateDiff(repo, store, compileAffectedValidator = compileAffectedValidator)
+            .diff(baselineRef, candidateRef, candidateSources)
         val json = FleetDiffJsonEncoder.encode(report)
 
         if (outputPath != null) {

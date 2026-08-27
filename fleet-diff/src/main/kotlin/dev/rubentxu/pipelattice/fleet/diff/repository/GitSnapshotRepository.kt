@@ -2,6 +2,7 @@ package dev.rubentxu.pipelattice.fleet.diff.repository
 
 import dev.rubentxu.pipelattice.compiler.parse.YamlResourceParser
 import dev.rubentxu.pipelattice.compose.CompositionEngine
+import dev.rubentxu.pipelattice.compose.createCompositionEngine
 import dev.rubentxu.pipelattice.compose.domain.CompositionRequest
 import dev.rubentxu.pipelattice.compose.domain.CompositionResult
 import dev.rubentxu.pipelattice.compose.domain.ExplainResult
@@ -12,7 +13,6 @@ import dev.rubentxu.pipelattice.fleet.diff.cache.SnapshotDiskCache
 import dev.rubentxu.pipelattice.fleet.diff.domain.SnapshotRepository
 import dev.rubentxu.pipelattice.fleet.diff.ports.GitRefResolution
 import dev.rubentxu.pipelattice.foundation.diagnostics.DiagnosticSink
-import dev.rubentxu.pipelattice.foundation.diagnostics.DiagnosticSeverity
 import dev.rubentxu.pipelattice.graph.domain.Edge
 import dev.rubentxu.pipelattice.graph.domain.GraphNode
 import dev.rubentxu.pipelattice.graph.domain.GraphSnapshot
@@ -27,6 +27,22 @@ import org.eclipse.jgit.storage.file.FileRepositoryBuilder
 import org.eclipse.jgit.revwalk.RevWalk
 import java.io.IOException
 import java.nio.file.Path
+
+/**
+ * Result of loading a snapshot from a git repository, including the sources used.
+ *
+ * This is returned by [GitSnapshotRepository.loadWithSources] to provide both
+ * the [snapshot] and the [sources] used to create it. This allows downstream
+ * consumers (like [dev.rubentxu.pipelattice.fleet.diff.domain.CompileAffectedValidator])
+ * to re-compose affected projects without re-parsing from git.
+ *
+ * @property snapshot The loaded graph snapshot (with edges already populated by the repository).
+ * @property sources The source documents that were parsed to create the snapshot.
+ */
+public data class LoadedSnapshot(
+    val snapshot: GraphSnapshot,
+    val sources: List<SourceDocument>,
+)
 
 /**
  * Git-backed [SnapshotRepository] implementation that resolves refs via JGit.
@@ -58,7 +74,8 @@ import java.nio.file.Path
  * @param snapshotFactory Factory for creating [GraphSnapshot] from source documents.
  *        Defaults to [GitSnapshotFactory].
  * @param cache Disk cache for resolved snapshots. Defaults to `${XDG_CACHE_HOME:-~/.cache}/pipelattice/fleet-snapshots/<repo-id>/`.
- * @param compositionEngine Engine for running composition to emit edges. Defaults to no-op.
+ * @param compositionEngine Engine for running composition to emit edges. Defaults to a real engine
+ *        via [createCompositionEngine]. Use a [NoOpCompositionEngine] in tests.
  * @throws GitRepositoryUnavailableException when the working directory is not a git repository
  *         or the git object store is inaccessible.
  * @see GitSnapshotFactory
@@ -70,7 +87,7 @@ public class GitSnapshotRepository(
     private val resourceParser: ResourceParser = YamlResourceParser(),
     private val snapshotFactory: GitSnapshotFactory = GitSnapshotFactory(),
     private val cache: SnapshotDiskCache = SnapshotDiskCache.defaultFor(workingDir),
-    private val compositionEngine: CompositionEngine = NoOpRepositoryCompositionEngine(),
+    private val compositionEngine: CompositionEngine = createCompositionEngine(YamlResourceParser()),
 ) : SnapshotRepository {
 
     /**
@@ -83,7 +100,23 @@ public class GitSnapshotRepository(
      * @throws GitRepositoryUnavailableException if the working directory is not a git repository
      *         or the git object store is inaccessible.
      */
-    override fun load(ref: String): GraphSnapshot? {
+    override fun load(ref: String): GraphSnapshot? = loadWithSources(ref)?.snapshot
+
+    /**
+     * Loads a [GraphSnapshot] by resolving the given git ref, returning both the snapshot
+     * and the sources used to create it.
+     *
+     * This method is identical to [load] but additionally returns the [SourceDocument] list
+     * used to create the snapshot. This is useful for downstream consumers that need to
+     * re-compose affected projects without re-parsing from git.
+     *
+     * @param ref A git ref (branch, tag, SHA, HEAD, HEAD~N, etc.).
+     * @return A [LoadedSnapshot] containing the snapshot and sources, or `null` if the ref
+     *         does not exist, is ambiguous, or any YAML fails to parse.
+     * @throws GitRepositoryUnavailableException if the working directory is not a git repository
+     *         or the git object store is inaccessible.
+     */
+    public fun loadWithSources(ref: String): LoadedSnapshot? {
         // Check upfront that .git exists - JGit's FileRepositoryBuilder doesn't reliably
         // throw when given a non-git directory, so we validate explicitly.
         val gitDir = workingDir.resolve(".git").toFile()
@@ -134,7 +167,7 @@ public class GitSnapshotRepository(
                 // Cache lookup — short-circuit on hit
                 val cached = cache.get(cacheKey)
                 if (cached != null) {
-                    return cached
+                    return LoadedSnapshot(cached, sources)
                 }
 
                 // Cache miss — create snapshot via factory
@@ -152,7 +185,7 @@ public class GitSnapshotRepository(
                 // Persist on success
                 cache.put(cacheKey, snapshotWithEdges)
 
-                snapshotWithEdges
+                LoadedSnapshot(snapshotWithEdges, sources)
             } catch (e: MissingObjectException) {
                 null
             } catch (e: IncorrectObjectTypeException) {
@@ -219,9 +252,9 @@ public class GitSnapshotRepository(
 }
 
 /**
- * No-op composition engine for repository.
+ * No-op composition engine for repository (test only).
  */
-private class NoOpRepositoryCompositionEngine : CompositionEngine {
+private class NoOpCompositionEngine : CompositionEngine {
     override fun compose(
         request: CompositionRequest,
         catalog: CatalogSource,

@@ -105,7 +105,11 @@ public object FleetDiffJsonEncoder {
             append("[")
             plans.mapIndexed { index, plan ->
                 if (index > 0) append(",")
-                append("{\"projectId\":\"${plan.projectId.canonicalForm}\",\"planDigest\":\"${plan.planDigest}\"}")
+                append("{\"projectId\":\"${plan.projectId.canonicalForm}\",\"planDigest\":\"${plan.planDigest}\"")
+                if (plan.diagnosticCode != null) {
+                    append(",\"diagnosticCode\":\"${plan.diagnosticCode}\"")
+                }
+                append("}")
             }
             append("]")
         }

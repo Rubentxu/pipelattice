@@ -45,10 +45,17 @@ public data class SecondaryHeuristicReport(
 
 /**
  * Reference to a plan by its project and digest.
+ *
+ * @param projectId The project ref for this plan.
+ * @param planDigest The digest of the composed plan.
+ * @param diagnosticCode Optional diagnostic code when this plan is invalid due to
+ *        a composition failure. Set to `E-COMPOSE-AFFECTED-001` when the compile-affected
+ *        validator detects a composition error. Null when the plan is valid.
  */
 public data class PlanReference(
     val projectId: ResourceRef,
     val planDigest: String,
+    val diagnosticCode: String? = null,
 )
 
 /**

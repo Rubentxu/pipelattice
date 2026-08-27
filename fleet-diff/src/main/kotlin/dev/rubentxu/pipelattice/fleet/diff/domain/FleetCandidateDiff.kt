@@ -1,10 +1,12 @@
 package dev.rubentxu.pipelattice.fleet.diff.domain
 
+import dev.rubentxu.pipelattice.compiler.parse.YamlResourceParser
 import dev.rubentxu.pipelattice.graph.domain.EdgeKind
 import dev.rubentxu.pipelattice.graph.domain.GraphNode
 import dev.rubentxu.pipelattice.graph.domain.GraphSnapshot
 import dev.rubentxu.pipelattice.graph.domain.StructuralDiff
 import dev.rubentxu.pipelattice.graph.ports.GraphProjectionStore
+import dev.rubentxu.pipelattice.resource.ResourceParser
 
 /**
  * Orchestrates diff analysis between two fleet snapshots.
@@ -17,12 +19,15 @@ import dev.rubentxu.pipelattice.graph.ports.GraphProjectionStore
  * - Plan validation pass via [compileAffectedValidator] populates [invalidPlans]
  *   as the PRIMARY signal; the removed-edge heuristic becomes secondary.
  * - Policy violations via [policySource] seam (empty in m16; spec-M3 deferred).
+ * - [diff] accepts optional [candidateSources] to enable re-composition in the
+ *   compile-affected validator. When null (e.g., cache-hit path), the validator
+ *   cannot re-compose and returns empty (unable to validate from cache).
  */
 public class FleetCandidateDiff(
     private val snapshotRepo: SnapshotRepository,
     private val graphStore: GraphProjectionStore,
     private val policySource: PolicyViolationSource = PolicyViolationSource(snapshotRepo),
-    private val compileAffectedValidator: CompileAffectedValidator = CompileAffectedValidator(),
+    private val compileAffectedValidator: CompileAffectedValidator? = null,
 ) {
 
     /**
@@ -30,10 +35,17 @@ public class FleetCandidateDiff(
      *
      * @param baseline A string reference to the baseline snapshot.
      * @param candidate A string reference to the candidate snapshot.
+     * @param candidateSources Optional source documents for the candidate ref. When provided,
+     *        the compile-affected validator can re-compose affected projects. When null
+     *        (e.g., cache-hit path), the validator returns empty for the primary signal.
      * @return A [FleetDiffReport] with all seven sections populated.
      * @throws IllegalArgumentException if either reference is not found.
      */
-    public fun diff(baseline: String, candidate: String): FleetDiffReport {
+    public fun diff(
+        baseline: String,
+        candidate: String,
+        candidateSources: List<dev.rubentxu.pipelattice.resource.SourceDocument>? = null,
+    ): FleetDiffReport {
         val baselineSnapshot = snapshotRepo.load(baseline)
             ?: throw IllegalArgumentException("Baseline snapshot not found: $baseline")
         val candidateSnapshot = snapshotRepo.load(candidate)
@@ -44,7 +56,15 @@ public class FleetCandidateDiff(
 
         // Primary signal: compile-affected validation
         val affectedProjects = affected.affectedNodes.filterIsInstance<GraphNode.Project>().toSet()
-        val primaryInvalidPlans = compileAffectedValidator(affectedProjects.map { it.id }.toSet())
+        val primaryInvalidPlans = if (candidateSources != null && compileAffectedValidator != null) {
+            compileAffectedValidator(
+                affectedProjects.map { it.id }.toSet(),
+                candidateSnapshot,
+                candidateSources,
+            )
+        } else {
+            emptySet()
+        }
 
         // Secondary signal: removed-edge heuristic (for backward compatibility)
         val (secondaryInvalidPlans, secondaryHeuristicReport) = computeSecondaryHeuristic(baselineSnapshot, effective)

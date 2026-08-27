@@ -3,6 +3,9 @@ package dev.rubentxu.pipelattice.fleet.diff.cache
 import dev.rubentxu.pipelattice.fleet.diff.repository.FakeResourceParser
 import dev.rubentxu.pipelattice.fleet.diff.repository.GitSnapshotFactory
 import dev.rubentxu.pipelattice.fleet.diff.ports.GitRefResolution
+import dev.rubentxu.pipelattice.foundation.ResourceRef
+import dev.rubentxu.pipelattice.graph.domain.Edge
+import dev.rubentxu.pipelattice.graph.domain.EdgeKind
 import dev.rubentxu.pipelattice.graph.domain.GraphNode
 import dev.rubentxu.pipelattice.graph.domain.GraphSnapshot
 import dev.rubentxu.pipelattice.graph.domain.PlanFingerprint
@@ -188,9 +191,16 @@ class SnapshotDiskCacheTest {
         val nodes = setOf(
             GraphNode.ConfigSource(Path.of("pipelines/build.yaml"), "abcd1234")
         )
+        val edges = setOf(
+            Edge(
+                source = GraphNode.ConfigSource(Path.of("pipelines/build.yaml"), "abcd1234"),
+                target = GraphNode.ConfigSource(Path.of("profiles/java.yaml"), "def5678"),
+                kind = EdgeKind.IMPORTS,
+            )
+        )
         val snapshot = GraphSnapshot(
             nodes = nodes,
-            edges = emptySet(),
+            edges = edges,
             fingerprint = PlanFingerprint("a".repeat(64))
         )
 
@@ -199,6 +209,43 @@ class SnapshotDiskCacheTest {
 
         assertEquals(snapshot.fingerprint, decoded.fingerprint)
         assertEquals(snapshot.nodes.size, decoded.nodes.size)
+        assertEquals(snapshot.edges.size, decoded.edges.size)
+        assertEquals(snapshot.edges, decoded.edges, "Edges must round-trip correctly")
+    }
+
+    @Test
+    fun `serializer round-trips edges with multiple edge kinds`() {
+        // Regression test: m16's cache HIT was stripping edges because the serializer
+        // was not exercising edge encoding/decoding. This test ensures edges are preserved.
+        // Uses ConfigSource nodes to avoid the nested-object parsing complexity in decodeEdge.
+        val nodes = setOf(
+            GraphNode.ConfigSource(Path.of("pipelines/build.yaml"), "abcd1234"),
+            GraphNode.ConfigSource(Path.of("profiles/java.yaml"), "def5678"),
+        )
+        val edges = setOf(
+            Edge(
+                source = GraphNode.ConfigSource(Path.of("pipelines/build.yaml"), "abcd1234"),
+                target = GraphNode.ConfigSource(Path.of("profiles/java.yaml"), "def5678"),
+                kind = EdgeKind.IMPORTS,
+            ),
+            Edge(
+                source = GraphNode.ConfigSource(Path.of("profiles/java.yaml"), "def5678"),
+                target = GraphNode.ConfigSource(Path.of("pipelines/build.yaml"), "abcd1234"),
+                kind = EdgeKind.OVERRIDES,
+            ),
+        )
+        val snapshot = GraphSnapshot(
+            nodes = nodes,
+            edges = edges,
+            fingerprint = PlanFingerprint("b".repeat(64)),
+        )
+
+        val json = GraphSnapshotSerializer.encode(snapshot)
+        val decoded = GraphSnapshotSerializer.decode(json)
+
+        assertEquals(snapshot.fingerprint, decoded.fingerprint)
+        assertEquals(snapshot.nodes, decoded.nodes)
+        assertEquals(snapshot.edges, decoded.edges, "Edges must round-trip correctly (order-independent)")
     }
 
     @Test

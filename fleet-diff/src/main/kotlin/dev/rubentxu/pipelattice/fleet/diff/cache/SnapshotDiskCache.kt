@@ -387,14 +387,57 @@ public object GraphSnapshotSerializer {
     }
 
     private fun decodeEdge(json: String): Edge {
-        val sourceJson = json.substringAfter("\"source\":").substringBefore("\"target\":")
-        val targetJson = json.substringAfter("\"target\":").substringBefore("\"kind\":")
-        val kindStr = json.substringAfter("\"kind\":\"").substringBefore('"')
+        // Parse the edge JSON by finding the source, target, and kind at the top level.
+        // The edge JSON is: {"source":{...},"target":{...},"kind":"KIND"}
+        // We need to find "kind":" at the TOP level (after the last "}" of nested objects).
+        // Strategy: find "kind":" that appears AFTER the last "}" in the JSON (which closes the target object).
+        val lastBrace = json.lastIndexOf('}')
+        val kindPrefix = "\"kind\":\""
+        val kindStart = json.indexOf(kindPrefix, lastBrace)
+        val kindStr = if (kindStart >= 0) {
+            json.substring(kindStart + kindPrefix.length).substringBefore('"')
+        } else {
+            // Fallback: find the last "kind":" in the string
+            var searchFrom = json.length
+            var found = ""
+            var pos = 0
+            while (true) {
+                val idx = json.indexOf(kindPrefix, pos)
+                if (idx < 0 || idx >= searchFrom) break
+                found = json.substring(idx + kindPrefix.length).substringBefore('"')
+                pos = idx + 1
+                if (idx < lastBrace) searchFrom = lastBrace
+            }
+            found
+        }
         val kind = edgeKindFromString(kindStr)
+
+        // For source and target, we use bracket matching to find the nested objects
+        val sourceJson = extractTopLevelObject(json, "source")
+        val targetJson = extractTopLevelObject(json, "target")
         return Edge(
             source = decodeNode(sourceJson.trim()),
             target = decodeNode(targetJson.trim()),
             kind = kind
         )
+    }
+
+    private fun extractTopLevelObject(json: String, fieldName: String): String {
+        // Extract the value of a top-level field whose value is a JSON object: {"fieldName":{...},...}
+        val fieldPrefix = "\"$fieldName\":"
+        val fieldStart = json.indexOf(fieldPrefix)
+        if (fieldStart < 0) return "{}"
+        val braceStart = json.indexOf('{', fieldStart + fieldPrefix.length)
+        if (braceStart < 0) return "{}"
+        var depth = 1
+        var i = braceStart + 1
+        while (i < json.length && depth > 0) {
+            when (json[i]) {
+                '{' -> depth++
+                '}' -> depth--
+            }
+            i++
+        }
+        return json.substring(braceStart, i)
     }
 }

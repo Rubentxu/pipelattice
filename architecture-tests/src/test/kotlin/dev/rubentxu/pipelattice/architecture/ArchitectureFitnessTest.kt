@@ -251,9 +251,25 @@ class ArchitectureFitnessTest {
         ).check(imported)
     }
 
-    // FLEET-002 (S14) is verified by integration tests: GitSnapshotRepository load emits edges
-    // from real YAMLs via CompositionToGraphTranslator. The ArchUnit formulation for "at least one
-    // class uses X" is complex; integration test coverage is sufficient per spec §C.
+    @ArchTest
+    fun `FLEET-002 - fleet-diff declares api pipelineCompose dependency`(imported: JavaClasses) {
+        // fleet-diff must declare api(projects.pipelineCompose) in its build.gradle.kts.
+        // This ArchUnit test verifies that the dependency is exercised by checking that
+        // GitSnapshotRepository (the primary consumer in fleet-diff that uses pipelineCompose)
+        // has at least one dependency on a pipelineCompose class.
+        // We use ArchUnit's contain* checker: at least one class that has name containing "GitSnapshotRepository"
+        // must depend on a class from the compose package.
+        val rule = classes()
+            .that().haveNameMatching(".*GitSnapshotRepository")
+            .and().resideInAPackage("dev.rubentxu.pipelattice.fleet.diff.repository..")
+            .should().dependOnClassesThat()
+            .resideInAnyPackage("dev.rubentxu.pipelattice.compose..")
+        rule.because(
+            "fleet-diff must declare api(projects.pipelineCompose) to access CompositionEngine and " +
+                "CompositionToGraphTranslator; GitSnapshotRepository must have at least one " +
+                "dependency on pipelineCompose classes to prove the api() dependency is real.",
+        ).check(imported)
+    }
 
     private fun rule(definition: ArchRule, because: String): ArchRule = definition.because(because)
 }
