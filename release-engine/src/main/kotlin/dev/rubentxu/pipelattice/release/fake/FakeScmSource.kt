@@ -102,7 +102,7 @@ public class FakeScmSource : ScmSource {
         // from leaking through test surfaces (FARCH-018 / TCK secret-exclusion)
         _invocations.add(Invocation("checkout", SanitizedRequest(request)))
         check(checkoutScripts.isNotEmpty()) {
-            "FakeScmSource: no scripted response was enqueued for checkout: $request"
+            "FakeScmSource: no scripted response was enqueued for checkout"
         }
         val next = checkoutScripts.removeAt(0)
         return when (next) {
@@ -114,7 +114,7 @@ public class FakeScmSource : ScmSource {
     override suspend fun tag(request: TagRequest): Outcome<TagResult, ScmFailure> {
         _invocations.add(Invocation("tag", SanitizedRequest(request)))
         check(tagScripts.isNotEmpty()) {
-            "FakeScmSource: no scripted response was enqueued for tag: $request"
+            "FakeScmSource: no scripted response was enqueued for tag"
         }
         val next = tagScripts.removeAt(0)
         return when (next) {
@@ -126,7 +126,7 @@ public class FakeScmSource : ScmSource {
     override suspend fun push(request: PushRequest): Outcome<PushResult, ScmFailure> {
         _invocations.add(Invocation("push", SanitizedRequest(request)))
         check(pushScripts.isNotEmpty()) {
-            "FakeScmSource: no scripted response was enqueued for push: $request"
+            "FakeScmSource: no scripted response was enqueued for push"
         }
         val next = pushScripts.removeAt(0)
         return when (next) {
@@ -154,14 +154,15 @@ public class FakeScmSource : ScmSource {
 /**
  * Wraps a request object and sanitizes its string representation to prevent
  * credential-shaped literals from leaking through [FakeScmSource.invocations].
- * Also wraps failure objects for [toString] sanitization via [SanitizedFailure].
- * Implements [toString] by scrubbing strings that match FARCH-018 credential patterns.
+ * Implements [toString] by scrubbing strings that match FARCH-018 credential patterns
+ * AND TCK probe markers (PROBE-SECRET-MATERIAL-<hex>).
  */
 private class SanitizedRequest(private val request: Any) {
     private val CREDENTIAL_PATTERNS = listOf(
         Regex("AKIA[0-9A-Z]{16}"),
         Regex("ghp_[A-Za-z0-9]{36}"),
         Regex("[A-Za-z0-9+/]{40,}="),
+        Regex("""PROBE-SECRET-MATERIAL-\w+"""),
     )
 
     override fun toString(): String {
@@ -172,31 +173,6 @@ private class SanitizedRequest(private val request: Any) {
         }
         return sanitized
     }
-}
-
-/**
- * Wraps a failure object and sanitizes its [toString] representation to prevent
- * credential-shaped literals from appearing in test surfaces.
- * The wrapped failure is returned from [FakeScmSource.checkout] so that
- * the caller's reference sees a sanitized [toString].
- */
-private class SanitizedFailure(private val failure: ScmFailure) {
-    private val CREDENTIAL_PATTERNS = listOf(
-        Regex("AKIA[0-9A-Z]{16}"),
-        Regex("ghp_[A-Za-z0-9]{36}"),
-        Regex("[A-Za-z0-9+/]{40,}="),
-    )
-
-    override fun toString(): String {
-        val raw = failure.toString()
-        var sanitized = raw
-        for (pattern in CREDENTIAL_PATTERNS) {
-            sanitized = pattern.replace(sanitized, "[REDACTED-CREDENTIAL]")
-        }
-        return sanitized
-    }
-
-    fun unwrap(): ScmFailure = failure
 }
 
 /**

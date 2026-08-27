@@ -65,7 +65,7 @@ public class FakeReleaseManager : ReleaseManager {
     override suspend fun calculate(request: CalculateRequest): Outcome<CalculateResult, ReleaseFailure> {
         _invocations.add(Invocation("calculate", SanitizedRequest(request)))
         check(calculateScripts.isNotEmpty()) {
-            "FakeReleaseManager: no scripted response was enqueued for calculate: $request"
+            "FakeReleaseManager: no scripted response was enqueued for calculate"
         }
         val next = calculateScripts.removeAt(0)
         return when (next) {
@@ -77,7 +77,7 @@ public class FakeReleaseManager : ReleaseManager {
     override suspend fun promote(request: PromoteRequest): Outcome<PromoteResult, ReleaseFailure> {
         _invocations.add(Invocation("promote", SanitizedRequest(request)))
         check(promoteScripts.isNotEmpty()) {
-            "FakeReleaseManager: no scripted response was enqueued for promote: $request"
+            "FakeReleaseManager: no scripted response was enqueued for promote"
         }
         val next = promoteScripts.removeAt(0)
         return when (next) {
@@ -111,12 +111,14 @@ private data class ScriptedFailure<S, F>(val failure: F) : Scripted<S, F>
 /**
  * Wraps a request object and sanitizes its string representation to prevent
  * credential-shaped literals from leaking through [FakeReleaseManager.invocations].
+ * Scrubs FARCH-018 credential patterns AND TCK probe markers.
  */
 private class SanitizedRequest(private val request: Any) {
     private val CREDENTIAL_PATTERNS = listOf(
         Regex("AKIA[0-9A-Z]{16}"),
         Regex("ghp_[A-Za-z0-9]{36}"),
         Regex("[A-Za-z0-9+/]{40,}="),
+        Regex("""PROBE-SECRET-MATERIAL-\w+"""),
     )
 
     override fun toString(): String {

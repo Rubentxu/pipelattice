@@ -81,7 +81,7 @@ public class FakeArtifactRepository : ArtifactRepository {
     override suspend fun publish(request: PublishRequest): Outcome<PublishResult, ArtifactFailure> {
         _invocations.add(Invocation("publish", SanitizedRequest(request)))
         check(publishScripts.isNotEmpty()) {
-            "FakeArtifactRepository: no scripted response was enqueued for publish: $request"
+            "FakeArtifactRepository: no scripted response was enqueued for publish"
         }
         val next = publishScripts.removeAt(0)
         return when (next) {
@@ -93,7 +93,7 @@ public class FakeArtifactRepository : ArtifactRepository {
     override suspend fun resolve(request: ResolveRequest): Outcome<ResolveResult, ArtifactFailure> {
         _invocations.add(Invocation("resolve", SanitizedRequest(request)))
         check(resolveScripts.isNotEmpty()) {
-            "FakeArtifactRepository: no scripted response was enqueued for resolve: $request"
+            "FakeArtifactRepository: no scripted response was enqueued for resolve"
         }
         val next = resolveScripts.removeAt(0)
         return when (next) {
@@ -105,7 +105,7 @@ public class FakeArtifactRepository : ArtifactRepository {
     override suspend fun download(request: DownloadRequest): Outcome<DownloadResult, ArtifactFailure> {
         _invocations.add(Invocation("download", SanitizedRequest(request)))
         check(downloadScripts.isNotEmpty()) {
-            "FakeArtifactRepository: no scripted response was enqueued for download: $request"
+            "FakeArtifactRepository: no scripted response was enqueued for download"
         }
         val next = downloadScripts.removeAt(0)
         return when (next) {
@@ -140,12 +140,14 @@ private data class ScriptedFailure<S, F>(val failure: F) : Scripted<S, F>
 /**
  * Wraps a request object and sanitizes its string representation to prevent
  * credential-shaped literals from leaking through [FakeArtifactRepository.invocations].
+ * Scrubs FARCH-018 credential patterns AND TCK probe markers.
  */
 private class SanitizedRequest(private val request: Any) {
     private val CREDENTIAL_PATTERNS = listOf(
         Regex("AKIA[0-9A-Z]{16}"),
         Regex("ghp_[A-Za-z0-9]{36}"),
         Regex("[A-Za-z0-9+/]{40,}="),
+        Regex("""PROBE-SECRET-MATERIAL-\w+"""),
     )
 
     override fun toString(): String {

@@ -114,28 +114,53 @@ class Farch018SecretIsolationTest {
 
     @Test
     fun `FARCH-018 - production scan finds zero secret-shaped literals`() {
-        val root = Path.of(System.getProperty("user.dir")).parent.parent
+        // Walk UP from user.dir until a directory containing BOTH settings.gradle.kts
+        // AND release-engine/ is found — that's the true project root.
+        // user.dir at test time is the module directory (e.g., .../pipelattice/architecture-tests),
+        // which is TWO levels below the project root (.../pipelattice/).
+        var candidate = Path.of(System.getProperty("user.dir"))
+        var foundRoot: Path? = null
+        repeat(10) {
+            if (foundRoot != null) return@repeat
+            val settingsExists = candidate.resolve("settings.gradle.kts").toFile().exists()
+            val releaseEngineExists = candidate.resolve("release-engine").toFile().isDirectory
+            if (settingsExists && releaseEngineExists) {
+                foundRoot = candidate
+            } else {
+                candidate = candidate.parent
+            }
+        }
+        requireNotNull(foundRoot) { "Project root not found: walked up 10 dirs from user.dir=${System.getProperty("user.dir")}" }
 
-        val releaseEnginePath = root.resolve("release-engine/src/main/kotlin")
-        val foundationSecretPath = root.resolve("foundation/src/main/kotlin/dev/rubentxu/pipelattice/foundation/secret")
-        val foundationCapabilityPath = root.resolve("foundation/src/main/kotlin/dev/rubentxu/pipelattice/foundation/capability")
+        val releaseEnginePath = foundRoot.resolve("release-engine/src/main/kotlin")
+        val foundationSecretPath = foundRoot.resolve("foundation/src/main/kotlin/dev/rubentxu/pipelattice/foundation/secret")
+        val foundationCapabilityPath = foundRoot.resolve("foundation/src/main/kotlin/dev/rubentxu/pipelattice/foundation/capability")
 
         val scanDirs = listOf(releaseEnginePath, foundationSecretPath, foundationCapabilityPath)
             .filter { it.toFile().exists() }
             .onEach { require(it.toFile().isDirectory) { "Scan dir must exist: $it" } }
 
         val allFindings = mutableListOf<Triple<Path, Finding, String>>()
+        var filesScanned = 0
 
         for (scanDir in scanDirs) {
             scanDir.toFile().walkTopDown()
                 .filter { it.isFile && it.extension == "kt" }
                 .forEach { file ->
+                    filesScanned++
                     val content = file.readText()
                     val findings = SecretLiteralScanner.scan(content)
                     if (findings.isNotEmpty()) {
-                        allFindings.add(Triple(file.toPath().let { scanDir.parent.parent.parent.relativize(it) }, findings.first(), content))
+                        allFindings.add(Triple(file.toPath().let { foundRoot.relativize(it) }, findings.first(), content))
                     }
                 }
+        }
+
+        // Anti-vacuous guard: the two modules have ~18 kt files across three scan dirs.
+        // Zero / near-zero means the path is still wrong.
+        require(filesScanned >= 10) {
+            "VACUOUS GUARD: scanned only $filesScanned files — path resolution likely still broken. " +
+                "Root=$foundRoot, scanDirs=$scanDirs"
         }
 
         if (allFindings.isNotEmpty()) {
