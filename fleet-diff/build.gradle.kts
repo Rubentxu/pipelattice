@@ -10,6 +10,7 @@ application {
 dependencies {
     api(projects.foundation)
     api(projects.graphProjection)
+    api(projects.configCompiler)
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.jgit)
     testImplementation(projects.testkit)
