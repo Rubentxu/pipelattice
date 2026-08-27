@@ -207,5 +207,25 @@ class ArchitectureFitnessTest {
         ).check(imported)
     }
 
+    @ArchTest
+    fun `FARCH-016 - fleet-diff is ProcessBuilder and Runtime dot exec free`(imported: JavaClasses) {
+        val rule = noClasses()
+            .that().resideInAPackage("dev.rubentxu.pipelattice.fleet.diff..")
+            .should().dependOnClassesThat()
+            .resideInAnyPackage(
+                "java.lang.ProcessBuilder..",
+                "java.lang.Runtime..",
+                "java.lang.Process..",
+                "kotlin.system..",
+                "org.apache.tools.ant.taskdefs.Execute..",
+            )
+        rule.allowEmptyShould(true)
+        rule.because(
+            "fleet-diff must execute git processes only via the ProcessRunner port " +
+                "consumed from :build-engine (FARCH-016); direct ProcessBuilder use would " +
+                "violate the abstraction proof (ADR-0026 docsync permanent reservation).",
+        ).check(imported)
+    }
+
     private fun rule(definition: ArchRule, because: String): ArchRule = definition.because(because)
 }

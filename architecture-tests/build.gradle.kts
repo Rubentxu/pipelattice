@@ -16,6 +16,7 @@ dependencies {
     testImplementation(projects.buildEngine)
     testImplementation(projects.providerGradle)
     testImplementation(projects.graphProjection)
+    testImplementation(projects.fleetDiff)
     testImplementation(libs.archunit.junit5)
 }
 
@@ -172,4 +173,30 @@ val farch015DefensiveScan by tasks.registering {
 
 tasks.named("check") {
     dependsOn(farch015DefensiveScan)
+}
+
+/**
+ * FARCH-016 defensive scan: verify fleet-diff/build.gradle.kts does not contain
+ * forbidden dependency tokens (processbuilder, runtime.exec, exitprocess, getenv).
+ * This guards against reintroducing process-execution deps at the build level,
+ * complementary to the ArchUnit bytecode check.
+ */
+val farch016DefensiveScan by tasks.registering {
+    val buildFile = rootProject.file("fleet-diff/build.gradle.kts")
+    inputs.file(buildFile)
+    doLast {
+        val content = buildFile.readText()
+        val forbiddenTokens = listOf("processbuilder", "runtime.exec", "exitprocess", "getenv")
+        val foundTokens = forbiddenTokens.filter { content.lowercase().contains(it) }
+        check(foundTokens.isEmpty()) {
+            "FARCH-016 DEFENSIVE SCAN FAILED: fleet-diff/build.gradle.kts must not contain " +
+                "forbidden dependency tokens: ${foundTokens.joinToString()}. " +
+                "FARCH-016 requires :fleet-diff to consume ProcessRunner from :build-engine."
+        }
+        println("FARCH-016 defensive scan PASSED: no forbidden tokens in fleet-diff/build.gradle.kts")
+    }
+}
+
+tasks.named("check") {
+    dependsOn(farch016DefensiveScan)
 }
