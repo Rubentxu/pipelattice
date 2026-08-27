@@ -10,18 +10,27 @@ import dev.rubentxu.pipelattice.graph.domain.GraphNode
 /**
  * Translates a [CompositionResult] into a [GraphChangeSet] for the reactive configuration graph.
  *
- * This mapper implements the Q8 mapping table from the design:
+ * ## Stability
+ * This class is part of the [dev.rubentxu.pipelattice.pipeline-compose] public API surface
+ * since 0.11.0. It is consumed by [dev.rubentxu.pipelattice.fleet-diff] to materialize edges
+ * from the composition engine.
  *
- * | CompositionResult source              | EdgeKind        | Direction         |
- * |-------------------------------------|-----------------|-------------------|
+ * ## Q8 mapping table
+ *
+ * | CompositionResult source              | EdgeKind          | Direction         |
+ * |-------------------------------------|-------------------|-------------------|
  * | ProfileImport.entry (PROFILE_IMPORT) | IMPORTS + EXTENDS | source → target   |
- * | Profile with selects (PROFILE)        | SELECTS          | profile → project |
- * | LocalOverride.entry (LOCAL)            | OVERRIDES        | local → pipeline  |
+ * | Profile with selects (PROFILE)        | SELECTS           | profile → project |
+ * | LocalOverride.entry (LOCAL)           | OVERRIDES         | local → pipeline  |
  *
  * Nodes are inferred from edges (source and target nodes are automatically included
  * in the resulting snapshot).
+ *
+ * Adding a new Q8 row requires an ADR + minor version bump.
+ *
+ * @since 0.11.0
  */
-internal class CompositionToGraphTranslator {
+public class CompositionToGraphTranslator {
 
     /**
      * Translates a [CompositionResult] into a [GraphChangeSet].
@@ -29,7 +38,7 @@ internal class CompositionToGraphTranslator {
      * @param result The composition result to translate.
      * @return A [GraphChangeSet] containing the graph edges derived from provenance.
      */
-    fun translate(result: CompositionResult): GraphChangeSet {
+    public fun translate(result: CompositionResult): GraphChangeSet {
         val addedEdges = buildList<Edge> {
             for ((_, provenanceChain) in result.provenance) {
                 for (provenance in provenanceChain) {
