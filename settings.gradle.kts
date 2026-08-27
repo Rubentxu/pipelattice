@@ -36,3 +36,5 @@ include(":provider-gradle")
 include(":graph-projection")
 // M9 — Fleet candidate diff orchestrator (FleetCandidateDiff + FleetDiffReport + SnapshotRepository + CLI).
 include(":fleet-diff")
+// M8 — Release engine module (SCM, Artifact & Release ports + fakes + TCKs).
+include(":release-engine")
