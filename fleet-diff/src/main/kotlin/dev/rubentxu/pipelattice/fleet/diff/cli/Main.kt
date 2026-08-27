@@ -1,6 +1,5 @@
 package dev.rubentxu.pipelattice.fleet.diff.cli
 
-import dev.rubentxu.pipelattice.build.facade.DefaultProcessRunner
 import dev.rubentxu.pipelattice.fleet.diff.domain.FleetCandidateDiff
 import dev.rubentxu.pipelattice.fleet.diff.json.FleetDiffJsonEncoder
 import dev.rubentxu.pipelattice.fleet.diff.repository.GitSnapshotRepository
@@ -108,7 +107,7 @@ public object Main {
             storeSynthetic(repo)
         } else {
             // Git path: use GitSnapshotRepository to resolve refs via git CLI
-            val gitRepo = GitSnapshotRepository(Path.of(repoPath), DefaultProcessRunner())
+            val gitRepo = GitSnapshotRepository(Path.of(repoPath))
             repo = InMemorySnapshotRepository()
             // Load baseline and candidate from git and store in the in-memory repo
             val baselineSnap = gitRepo.load(baselineRef)

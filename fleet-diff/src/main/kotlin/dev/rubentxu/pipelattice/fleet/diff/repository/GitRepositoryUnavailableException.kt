@@ -10,14 +10,14 @@ package dev.rubentxu.pipelattice.fleet.diff.repository
  * Scenarios that throw this exception:
  * - [dev.rubentxu.pipelattice.fleet.diff.repository.GitSnapshotRepository] is constructed
  *   with a path that is not a git working tree.
- * - The `git` binary is not present on the system PATH.
+ * - The JGit object store is inaccessible (corrupted, permissions, etc.).
  *
- * FARCH-016 guards the production surface: [GitSnapshotRepository] must not import
+ * FARCH-016 v1 guards the production surface: [GitSnapshotRepository] must not import
  * `java.lang.ProcessBuilder`, `java.lang.Runtime`, `java.lang.Process`, `kotlin.system.exitProcess`,
- * or `org.apache.tools.ant.taskdefs.Execute`.
+ * or `org.apache.tools.ant.taskdefs.Execute`. This exception is the upstream result of
+ * JGit's [java.io.IOException] when the repository cannot be opened.
  *
  * @see GitSnapshotRepository
- * @see dev.rubentxu.pipelattice.fleet.diff.ports.gitRevParse
  */
 public class GitRepositoryUnavailableException(
     message: String,
