@@ -2,8 +2,8 @@ package dev.rubentxu.pipelattice.fleet.diff.repository
 
 import org.eclipse.jgit.api.Git
 import org.eclipse.jgit.revwalk.RevWalk
-import org.eclipse.jgit.treewalk.TreeWalk
 import org.junit.jupiter.api.io.TempDir
+import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
@@ -24,6 +24,7 @@ class GitTreeLoaderTest {
     lateinit var tempDir: Path
 
     private fun initJgitRepo(dir: Path, configure: (Path) -> Unit = {}): Git {
+        Files.createDirectories(dir)
         val git = Git.init()
             .setDirectory(dir.toFile())
             .call()
@@ -37,50 +38,58 @@ class GitTreeLoaderTest {
         return git
     }
 
+    private fun Path.writeFile(relativePath: String, content: String) {
+        val file = this.resolve(relativePath)
+        file.parent.toFile().mkdirs()
+        file.toFile().writeText(content)
+    }
+
     @Test
     fun `tree walk filters YAML only`() {
         val gitDir = tempDir.resolve("git-repo")
-        val git = initJgitRepo(gitDir) {
-            it.resolve("pipelines/build.yaml").toFile().writeText("apiVersion: v1\nkind: PipelineDefinition")
-            it.resolve("docs/README.md").toFile().writeText("# Readme")
-            it.resolve("data/binary.bin").toFile().writeBytes(byteArrayOf(0, 1, 2, 3))
-            it.resolve(".gitignore").toFile().writeText("*.class")
+        initJgitRepo(gitDir) {
+            it.writeFile("pipelines/build.yaml", "apiVersion: v1\nkind: PipelineDefinition")
+            it.writeFile("docs/README.md", "# Readme")
+            it.writeFile("data/binary.bin", String(byteArrayOf(0, 1, 2, 3)))
+            it.writeFile(".gitignore", "*.class")
         }
-        git.use {
-            val repo = it.repository
-            val resolved = repo.resolve("HEAD")
-            val revWalk = RevWalk(repo)
-            val commit = revWalk.parseCommit(resolved!!)
-            val loader = GitTreeLoader(repo)
-            val sources = loader.loadSources(commit)
-            revWalk.close()
 
-            assertEquals(1, sources.size, "Only .yaml file should be returned")
-            assertEquals("pipelines/build.yaml", sources[0].path)
+        Git.open(gitDir.toFile()).use { git ->
+            val repo = git.repository
+            val resolved = repo.resolve("HEAD")
+            RevWalk(repo).use { revWalk ->
+                val commit = revWalk.parseCommit(resolved!!)
+                val loader = GitTreeLoader(repo)
+                val sources = loader.loadSources(commit)
+
+                assertEquals(1, sources.size, "Only .yaml file should be returned")
+                assertEquals("pipelines/build.yaml", sources[0].path)
+            }
         }
     }
 
     @Test
     fun `tree walk returns sorted by path`() {
         val gitDir = tempDir.resolve("git-repo")
-        val git = initJgitRepo(gitDir) {
-            it.resolve("z.yaml").toFile().writeText("apiVersion: v1\nkind: PipelineDefinition")
-            it.resolve("a.yaml").toFile().writeText("apiVersion: v1\nkind: PipelineDefinition")
-            it.resolve("m.yaml").toFile().writeText("apiVersion: v1\nkind: PipelineDefinition")
+        initJgitRepo(gitDir) {
+            it.writeFile("z.yaml", "apiVersion: v1\nkind: PipelineDefinition")
+            it.writeFile("a.yaml", "apiVersion: v1\nkind: PipelineDefinition")
+            it.writeFile("m.yaml", "apiVersion: v1\nkind: PipelineDefinition")
         }
-        git.use {
-            val repo = it.repository
-            val resolved = repo.resolve("HEAD")
-            val revWalk = RevWalk(repo)
-            val commit = revWalk.parseCommit(resolved!!)
-            val loader = GitTreeLoader(repo)
-            val sources = loader.loadSources(commit)
-            revWalk.close()
 
-            assertEquals(3, sources.size)
-            assertEquals("a.yaml", sources[0].path)
-            assertEquals("m.yaml", sources[1].path)
-            assertEquals("z.yaml", sources[2].path)
+        Git.open(gitDir.toFile()).use { git ->
+            val repo = git.repository
+            val resolved = repo.resolve("HEAD")
+            RevWalk(repo).use { revWalk ->
+                val commit = revWalk.parseCommit(resolved!!)
+                val loader = GitTreeLoader(repo)
+                val sources = loader.loadSources(commit)
+
+                assertEquals(3, sources.size)
+                assertEquals("a.yaml", sources[0].path)
+                assertEquals("m.yaml", sources[1].path)
+                assertEquals("z.yaml", sources[2].path)
+            }
         }
     }
 
@@ -88,45 +97,45 @@ class GitTreeLoaderTest {
     fun `blob read returns UTF-8 with non-ASCII`() {
         val gitDir = tempDir.resolve("git-repo")
         val content = "apiVersion: v1\nkind: PipelineDefinition\nmetadata:\n  name: pipeline-ñ" // ñ is UTF-8
-        val git = initJgitRepo(gitDir) {
-            it.resolve("pipelines/build.yaml").toFile().writeText(content)
+        initJgitRepo(gitDir) {
+            it.writeFile("pipelines/build.yaml", content)
         }
-        git.use {
-            val repo = it.repository
-            val resolved = repo.resolve("HEAD")
-            val revWalk = RevWalk(repo)
-            val commit = revWalk.parseCommit(resolved!!)
-            val loader = GitTreeLoader(repo)
-            val sources = loader.loadSources(commit)
-            revWalk.close()
 
-            assertEquals(1, sources.size)
-            assertEquals(content, sources[0].content, "UTF-8 content must round-trip byte-identically")
-            // Verify it's the same string when re-encoded
-            assertContentEquals(
-                content.toByteArray(Charsets.UTF_8),
-                sources[0].content.toByteArray(Charsets.UTF_8)
-            )
+        Git.open(gitDir.toFile()).use { git ->
+            val repo = git.repository
+            val resolved = repo.resolve("HEAD")
+            RevWalk(repo).use { revWalk ->
+                val commit = revWalk.parseCommit(resolved!!)
+                val loader = GitTreeLoader(repo)
+                val sources = loader.loadSources(commit)
+
+                assertEquals(1, sources.size)
+                assertEquals(content, sources[0].content, "UTF-8 content must round-trip byte-identically")
+                assertContentEquals(
+                    content.toByteArray(Charsets.UTF_8),
+                    sources[0].content.toByteArray(Charsets.UTF_8)
+                )
+            }
         }
     }
 
     @Test
     fun `tree walk skips git directory`() {
         val gitDir = tempDir.resolve("git-repo")
-        val git = initJgitRepo(gitDir) {
-            it.resolve("pipelines/build.yaml").toFile().writeText("apiVersion: v1\nkind: PipelineDefinition")
+        initJgitRepo(gitDir) {
+            it.writeFile("pipelines/build.yaml", "apiVersion: v1\nkind: PipelineDefinition")
         }
-        git.use {
-            val repo = it.repository
-            val resolved = repo.resolve("HEAD")
-            val revWalk = RevWalk(repo)
-            val commit = revWalk.parseCommit(resolved!!)
-            val loader = GitTreeLoader(repo)
-            val sources = loader.loadSources(commit)
-            revWalk.close()
 
-            // No .git paths should appear
-            assertTrue(sources.none { it.path.contains(".git/") }, "Should not contain .git/ paths")
+        Git.open(gitDir.toFile()).use { git ->
+            val repo = git.repository
+            val resolved = repo.resolve("HEAD")
+            RevWalk(repo).use { revWalk ->
+                val commit = revWalk.parseCommit(resolved!!)
+                val loader = GitTreeLoader(repo)
+                val sources = loader.loadSources(commit)
+
+                assertTrue(sources.none { it.path.contains(".git/") }, "Should not contain .git/ paths")
+            }
         }
     }
 }

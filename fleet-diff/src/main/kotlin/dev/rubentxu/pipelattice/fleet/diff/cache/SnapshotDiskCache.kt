@@ -36,7 +36,7 @@ import kotlin.io.path.invariantSeparatorsPathString
  *
  * @param cacheDir The directory where cache files are stored. Created if absent.
  */
-public class SnapshotDiskCache(private val cacheDir: Path) {
+public class SnapshotDiskCache(public val cacheDir: Path) {
 
     init {
         Files.createDirectories(cacheDir)
