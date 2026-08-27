@@ -295,20 +295,13 @@ class ArchitectureFitnessTest {
         ).check(imported)
     }
 
-    @ArchTest
-    fun `FARCH-018 - no secret-shaped literals in production outside foundation secret`(imported: JavaClasses) {
-        // Bytecode rule: no class outside foundation.secret.. may reference credential-shaped literals
-        val rule = noClasses()
-            .that().resideOutsideOfPackage("dev.rubentxu.pipelattice.foundation.secret..")
-            .and().resideInAPackage("dev.rubentxu.pipelattice..")
-            .should().dependOnClassesThat()
-            .haveNameMatching(".*AKIA[0-9A-Z]{16}.*")
-        rule.allowEmptyShould(true)
-        rule.because(
-            "FARCH-018: no secret-shaped literals (AKIA[0-9A-Z]{16}, ghp_, base64 blobs) " +
-                "in production code outside foundation.secret; synthetic test markers are exempt"
-        ).check(imported)
-    }
+    // NOTE: The original ArchUnit FARCH-018 bytecode rule (haveNameMatching on class names) was a NO-OP.
+    // It matched Java class FQNs, never string literals. Replaced by Farch018SecretIsolationTest
+    // which performs a real source-file scan using SecretLiteralScanner — the same logic as the
+    // releaseEngineSecretIsolationScan Gradle task, but testable and self-verifying.
+    //
+    // The bytecode constraint (no class outside foundation.secret..) is retained as a separate
+    // note for documentation; the concrete enforcement is via the source scan below.
 
     private fun rule(definition: ArchRule, because: String): ArchRule = definition.because(because)
 }

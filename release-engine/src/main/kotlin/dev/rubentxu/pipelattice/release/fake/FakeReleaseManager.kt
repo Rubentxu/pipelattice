@@ -14,35 +14,38 @@ import dev.rubentxu.pipelattice.foundation.outcome.Outcome
  */
 public class FakeReleaseManager : ReleaseManager {
 
-    private val scripts: MutableList<Any> = mutableListOf()
+    // Per-operation typed queues — eliminates the need for @Suppress("UNCHECKED_CAST")
+    private val calculateScripts: MutableList<Scripted<CalculateResult, ReleaseFailure>> = mutableListOf()
+    private val promoteScripts: MutableList<Scripted<PromoteResult, ReleaseFailure>> = mutableListOf()
+
     private val _invocations: MutableList<Invocation> = mutableListOf()
 
     /**
      * Enqueues a scripted calculate success result.
      */
     public fun enqueueCalculateSuccess(result: CalculateResult) {
-        scripts.add(result)
+        calculateScripts.add(ScriptedSuccess(result))
     }
 
     /**
      * Enqueues a scripted calculate failure result.
      */
     public fun enqueueCalculateFailure(failure: ReleaseFailure) {
-        scripts.add(failure)
+        calculateScripts.add(ScriptedFailure(failure))
     }
 
     /**
      * Enqueues a scripted promote success result.
      */
     public fun enqueuePromoteSuccess(result: PromoteResult) {
-        scripts.add(result)
+        promoteScripts.add(ScriptedSuccess(result))
     }
 
     /**
      * Enqueues a scripted promote failure result.
      */
     public fun enqueuePromoteFailure(failure: ReleaseFailure) {
-        scripts.add(failure)
+        promoteScripts.add(ScriptedFailure(failure))
     }
 
     /**
@@ -54,35 +57,32 @@ public class FakeReleaseManager : ReleaseManager {
      * Resets the fixture.
      */
     public fun reset() {
-        scripts.clear()
+        calculateScripts.clear()
+        promoteScripts.clear()
         _invocations.clear()
     }
 
-    @Suppress("UNCHECKED_CAST")
     override suspend fun calculate(request: CalculateRequest): Outcome<CalculateResult, ReleaseFailure> {
-        _invocations.add(Invocation("calculate", request))
-        check(scripts.isNotEmpty()) {
+        _invocations.add(Invocation("calculate", SanitizedRequest(request)))
+        check(calculateScripts.isNotEmpty()) {
             "FakeReleaseManager: no scripted response was enqueued for calculate: $request"
         }
-        val next = scripts.removeAt(0)
+        val next = calculateScripts.removeAt(0)
         return when (next) {
-            is CalculateResult -> Outcome.Success(next)
-            is ReleaseFailure -> Outcome.Failure(next)
-            else -> error("Unexpected type in calculate queue: ${next::class}")
+            is ScriptedSuccess<CalculateResult, ReleaseFailure> -> Outcome.Success(next.result)
+            is ScriptedFailure<CalculateResult, ReleaseFailure> -> Outcome.Failure(next.failure)
         }
     }
 
-    @Suppress("UNCHECKED_CAST")
     override suspend fun promote(request: PromoteRequest): Outcome<PromoteResult, ReleaseFailure> {
-        _invocations.add(Invocation("promote", request))
-        check(scripts.isNotEmpty()) {
+        _invocations.add(Invocation("promote", SanitizedRequest(request)))
+        check(promoteScripts.isNotEmpty()) {
             "FakeReleaseManager: no scripted response was enqueued for promote: $request"
         }
-        val next = scripts.removeAt(0)
+        val next = promoteScripts.removeAt(0)
         return when (next) {
-            is PromoteResult -> Outcome.Success(next)
-            is ReleaseFailure -> Outcome.Failure(next)
-            else -> error("Unexpected type in promote queue: ${next::class}")
+            is ScriptedSuccess<PromoteResult, ReleaseFailure> -> Outcome.Success(next.result)
+            is ScriptedFailure<PromoteResult, ReleaseFailure> -> Outcome.Failure(next.failure)
         }
     }
 
@@ -99,4 +99,32 @@ public class FakeReleaseManager : ReleaseManager {
         public val operation: String,
         public val request: Any,
     )
+}
+
+/**
+ * Typed scripted response — success or failure — used by [FakeReleaseManager] queues.
+ */
+private sealed interface Scripted<out S, out F>
+private data class ScriptedSuccess<S, F>(val result: S) : Scripted<S, F>
+private data class ScriptedFailure<S, F>(val failure: F) : Scripted<S, F>
+
+/**
+ * Wraps a request object and sanitizes its string representation to prevent
+ * credential-shaped literals from leaking through [FakeReleaseManager.invocations].
+ */
+private class SanitizedRequest(private val request: Any) {
+    private val CREDENTIAL_PATTERNS = listOf(
+        Regex("AKIA[0-9A-Z]{16}"),
+        Regex("ghp_[A-Za-z0-9]{36}"),
+        Regex("[A-Za-z0-9+/]{40,}="),
+    )
+
+    override fun toString(): String {
+        val raw = request.toString()
+        var sanitized = raw
+        for (pattern in CREDENTIAL_PATTERNS) {
+            sanitized = pattern.replace(sanitized, "[REDACTED-CREDENTIAL]")
+        }
+        return sanitized
+    }
 }

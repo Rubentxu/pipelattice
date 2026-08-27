@@ -14,49 +14,53 @@ import dev.rubentxu.pipelattice.foundation.outcome.Outcome
  */
 public class FakeArtifactRepository : ArtifactRepository {
 
-    private val scripts: MutableList<Any> = mutableListOf()
+    // Per-operation typed queues — eliminates the need for @Suppress("UNCHECKED_CAST")
+    private val publishScripts: MutableList<Scripted<PublishResult, ArtifactFailure>> = mutableListOf()
+    private val resolveScripts: MutableList<Scripted<ResolveResult, ArtifactFailure>> = mutableListOf()
+    private val downloadScripts: MutableList<Scripted<DownloadResult, ArtifactFailure>> = mutableListOf()
+
     private val _invocations: MutableList<Invocation> = mutableListOf()
 
     /**
      * Enqueues a scripted publish success result.
      */
     public fun enqueuePublishSuccess(result: PublishResult) {
-        scripts.add(result)
+        publishScripts.add(ScriptedSuccess(result))
     }
 
     /**
      * Enqueues a scripted publish failure result.
      */
     public fun enqueuePublishFailure(failure: ArtifactFailure) {
-        scripts.add(failure)
+        publishScripts.add(ScriptedFailure(failure))
     }
 
     /**
      * Enqueues a scripted resolve success result.
      */
     public fun enqueueResolveSuccess(result: ResolveResult) {
-        scripts.add(result)
+        resolveScripts.add(ScriptedSuccess(result))
     }
 
     /**
      * Enqueues a scripted resolve failure result.
      */
     public fun enqueueResolveFailure(failure: ArtifactFailure) {
-        scripts.add(failure)
+        resolveScripts.add(ScriptedFailure(failure))
     }
 
     /**
      * Enqueues a scripted download success result.
      */
     public fun enqueueDownloadSuccess(result: DownloadResult) {
-        scripts.add(result)
+        downloadScripts.add(ScriptedSuccess(result))
     }
 
     /**
      * Enqueues a scripted download failure result.
      */
     public fun enqueueDownloadFailure(failure: ArtifactFailure) {
-        scripts.add(failure)
+        downloadScripts.add(ScriptedFailure(failure))
     }
 
     /**
@@ -68,49 +72,45 @@ public class FakeArtifactRepository : ArtifactRepository {
      * Resets the fixture.
      */
     public fun reset() {
-        scripts.clear()
+        publishScripts.clear()
+        resolveScripts.clear()
+        downloadScripts.clear()
         _invocations.clear()
     }
 
-    @Suppress("UNCHECKED_CAST")
     override suspend fun publish(request: PublishRequest): Outcome<PublishResult, ArtifactFailure> {
-        _invocations.add(Invocation("publish", request))
-        check(scripts.isNotEmpty()) {
+        _invocations.add(Invocation("publish", SanitizedRequest(request)))
+        check(publishScripts.isNotEmpty()) {
             "FakeArtifactRepository: no scripted response was enqueued for publish: $request"
         }
-        val next = scripts.removeAt(0)
+        val next = publishScripts.removeAt(0)
         return when (next) {
-            is PublishResult -> Outcome.Success(next)
-            is ArtifactFailure -> Outcome.Failure(next)
-            else -> error("Unexpected type in publish queue: ${next::class}")
+            is ScriptedSuccess<PublishResult, ArtifactFailure> -> Outcome.Success(next.result)
+            is ScriptedFailure<PublishResult, ArtifactFailure> -> Outcome.Failure(next.failure)
         }
     }
 
-    @Suppress("UNCHECKED_CAST")
     override suspend fun resolve(request: ResolveRequest): Outcome<ResolveResult, ArtifactFailure> {
-        _invocations.add(Invocation("resolve", request))
-        check(scripts.isNotEmpty()) {
+        _invocations.add(Invocation("resolve", SanitizedRequest(request)))
+        check(resolveScripts.isNotEmpty()) {
             "FakeArtifactRepository: no scripted response was enqueued for resolve: $request"
         }
-        val next = scripts.removeAt(0)
+        val next = resolveScripts.removeAt(0)
         return when (next) {
-            is ResolveResult -> Outcome.Success(next)
-            is ArtifactFailure -> Outcome.Failure(next)
-            else -> error("Unexpected type in resolve queue: ${next::class}")
+            is ScriptedSuccess<ResolveResult, ArtifactFailure> -> Outcome.Success(next.result)
+            is ScriptedFailure<ResolveResult, ArtifactFailure> -> Outcome.Failure(next.failure)
         }
     }
 
-    @Suppress("UNCHECKED_CAST")
     override suspend fun download(request: DownloadRequest): Outcome<DownloadResult, ArtifactFailure> {
-        _invocations.add(Invocation("download", request))
-        check(scripts.isNotEmpty()) {
+        _invocations.add(Invocation("download", SanitizedRequest(request)))
+        check(downloadScripts.isNotEmpty()) {
             "FakeArtifactRepository: no scripted response was enqueued for download: $request"
         }
-        val next = scripts.removeAt(0)
+        val next = downloadScripts.removeAt(0)
         return when (next) {
-            is DownloadResult -> Outcome.Success(next)
-            is ArtifactFailure -> Outcome.Failure(next)
-            else -> error("Unexpected type in download queue: ${next::class}")
+            is ScriptedSuccess<DownloadResult, ArtifactFailure> -> Outcome.Success(next.result)
+            is ScriptedFailure<DownloadResult, ArtifactFailure> -> Outcome.Failure(next.failure)
         }
     }
 
@@ -128,4 +128,32 @@ public class FakeArtifactRepository : ArtifactRepository {
         public val operation: String,
         public val request: Any,
     )
+}
+
+/**
+ * Typed scripted response — success or failure — used by [FakeArtifactRepository] queues.
+ */
+private sealed interface Scripted<out S, out F>
+private data class ScriptedSuccess<S, F>(val result: S) : Scripted<S, F>
+private data class ScriptedFailure<S, F>(val failure: F) : Scripted<S, F>
+
+/**
+ * Wraps a request object and sanitizes its string representation to prevent
+ * credential-shaped literals from leaking through [FakeArtifactRepository.invocations].
+ */
+private class SanitizedRequest(private val request: Any) {
+    private val CREDENTIAL_PATTERNS = listOf(
+        Regex("AKIA[0-9A-Z]{16}"),
+        Regex("ghp_[A-Za-z0-9]{36}"),
+        Regex("[A-Za-z0-9+/]{40,}="),
+    )
+
+    override fun toString(): String {
+        val raw = request.toString()
+        var sanitized = raw
+        for (pattern in CREDENTIAL_PATTERNS) {
+            sanitized = pattern.replace(sanitized, "[REDACTED-CREDENTIAL]")
+        }
+        return sanitized
+    }
 }

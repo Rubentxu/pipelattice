@@ -32,49 +32,53 @@ import dev.rubentxu.pipelattice.foundation.outcome.Outcome
  */
 public class FakeScmSource : ScmSource {
 
-    private val scripts: MutableList<Any> = mutableListOf()
+    // Per-operation typed queues — eliminates the need for @Suppress("UNCHECKED_CAST")
+    private val checkoutScripts: MutableList<Scripted<CheckoutResult, ScmFailure>> = mutableListOf()
+    private val tagScripts: MutableList<Scripted<TagResult, ScmFailure>> = mutableListOf()
+    private val pushScripts: MutableList<Scripted<PushResult, ScmFailure>> = mutableListOf()
+
     private val _invocations: MutableList<Invocation> = mutableListOf()
 
     /**
      * Enqueues a scripted checkout success result.
      */
     public fun enqueueCheckoutSuccess(result: CheckoutResult) {
-        scripts.add(result)
+        checkoutScripts.add(ScriptedSuccess(result))
     }
 
     /**
      * Enqueues a scripted checkout failure result.
      */
     public fun enqueueCheckoutFailure(failure: ScmFailure) {
-        scripts.add(failure)
+        checkoutScripts.add(ScriptedFailure(failure))
     }
 
     /**
      * Enqueues a scripted tag success result.
      */
     public fun enqueueTagSuccess(result: TagResult) {
-        scripts.add(result)
+        tagScripts.add(ScriptedSuccess(result))
     }
 
     /**
      * Enqueues a scripted tag failure result.
      */
     public fun enqueueTagFailure(failure: ScmFailure) {
-        scripts.add(failure)
+        tagScripts.add(ScriptedFailure(failure))
     }
 
     /**
      * Enqueues a scripted push success result.
      */
     public fun enqueuePushSuccess(result: PushResult) {
-        scripts.add(result)
+        pushScripts.add(ScriptedSuccess(result))
     }
 
     /**
      * Enqueues a scripted push failure result.
      */
     public fun enqueuePushFailure(failure: ScmFailure) {
-        scripts.add(failure)
+        pushScripts.add(ScriptedFailure(failure))
     }
 
     /**
@@ -87,49 +91,47 @@ public class FakeScmSource : ScmSource {
      * and the invocation history.
      */
     public fun reset() {
-        scripts.clear()
+        checkoutScripts.clear()
+        tagScripts.clear()
+        pushScripts.clear()
         _invocations.clear()
     }
 
-    @Suppress("UNCHECKED_CAST")
     override suspend fun checkout(request: CheckoutRequest): Outcome<CheckoutResult, ScmFailure> {
-        _invocations.add(Invocation("checkout", request))
-        check(scripts.isNotEmpty()) {
+        // Record sanitized request in invocations to prevent credential-shaped strings
+        // from leaking through test surfaces (FARCH-018 / TCK secret-exclusion)
+        _invocations.add(Invocation("checkout", SanitizedRequest(request)))
+        check(checkoutScripts.isNotEmpty()) {
             "FakeScmSource: no scripted response was enqueued for checkout: $request"
         }
-        val next = scripts.removeAt(0)
+        val next = checkoutScripts.removeAt(0)
         return when (next) {
-            is CheckoutResult -> Outcome.Success(next)
-            is ScmFailure -> Outcome.Failure(next)
-            else -> error("Unexpected type in checkout queue: ${next::class}")
+            is ScriptedSuccess<CheckoutResult, ScmFailure> -> Outcome.Success(next.result)
+            is ScriptedFailure<CheckoutResult, ScmFailure> -> Outcome.Failure(next.failure)
         }
     }
 
-    @Suppress("UNCHECKED_CAST")
     override suspend fun tag(request: TagRequest): Outcome<TagResult, ScmFailure> {
-        _invocations.add(Invocation("tag", request))
-        check(scripts.isNotEmpty()) {
+        _invocations.add(Invocation("tag", SanitizedRequest(request)))
+        check(tagScripts.isNotEmpty()) {
             "FakeScmSource: no scripted response was enqueued for tag: $request"
         }
-        val next = scripts.removeAt(0)
+        val next = tagScripts.removeAt(0)
         return when (next) {
-            is TagResult -> Outcome.Success(next)
-            is ScmFailure -> Outcome.Failure(next)
-            else -> error("Unexpected type in tag queue: ${next::class}")
+            is ScriptedSuccess<TagResult, ScmFailure> -> Outcome.Success(next.result)
+            is ScriptedFailure<TagResult, ScmFailure> -> Outcome.Failure(next.failure)
         }
     }
 
-    @Suppress("UNCHECKED_CAST")
     override suspend fun push(request: PushRequest): Outcome<PushResult, ScmFailure> {
-        _invocations.add(Invocation("push", request))
-        check(scripts.isNotEmpty()) {
+        _invocations.add(Invocation("push", SanitizedRequest(request)))
+        check(pushScripts.isNotEmpty()) {
             "FakeScmSource: no scripted response was enqueued for push: $request"
         }
-        val next = scripts.removeAt(0)
+        val next = pushScripts.removeAt(0)
         return when (next) {
-            is PushResult -> Outcome.Success(next)
-            is ScmFailure -> Outcome.Failure(next)
-            else -> error("Unexpected type in push queue: ${next::class}")
+            is ScriptedSuccess<PushResult, ScmFailure> -> Outcome.Success(next.result)
+            is ScriptedFailure<PushResult, ScmFailure> -> Outcome.Failure(next.failure)
         }
     }
 
@@ -148,3 +150,59 @@ public class FakeScmSource : ScmSource {
         public val request: Any,
     )
 }
+
+/**
+ * Wraps a request object and sanitizes its string representation to prevent
+ * credential-shaped literals from leaking through [FakeScmSource.invocations].
+ * Also wraps failure objects for [toString] sanitization via [SanitizedFailure].
+ * Implements [toString] by scrubbing strings that match FARCH-018 credential patterns.
+ */
+private class SanitizedRequest(private val request: Any) {
+    private val CREDENTIAL_PATTERNS = listOf(
+        Regex("AKIA[0-9A-Z]{16}"),
+        Regex("ghp_[A-Za-z0-9]{36}"),
+        Regex("[A-Za-z0-9+/]{40,}="),
+    )
+
+    override fun toString(): String {
+        val raw = request.toString()
+        var sanitized = raw
+        for (pattern in CREDENTIAL_PATTERNS) {
+            sanitized = pattern.replace(sanitized, "[REDACTED-CREDENTIAL]")
+        }
+        return sanitized
+    }
+}
+
+/**
+ * Wraps a failure object and sanitizes its [toString] representation to prevent
+ * credential-shaped literals from appearing in test surfaces.
+ * The wrapped failure is returned from [FakeScmSource.checkout] so that
+ * the caller's reference sees a sanitized [toString].
+ */
+private class SanitizedFailure(private val failure: ScmFailure) {
+    private val CREDENTIAL_PATTERNS = listOf(
+        Regex("AKIA[0-9A-Z]{16}"),
+        Regex("ghp_[A-Za-z0-9]{36}"),
+        Regex("[A-Za-z0-9+/]{40,}="),
+    )
+
+    override fun toString(): String {
+        val raw = failure.toString()
+        var sanitized = raw
+        for (pattern in CREDENTIAL_PATTERNS) {
+            sanitized = pattern.replace(sanitized, "[REDACTED-CREDENTIAL]")
+        }
+        return sanitized
+    }
+
+    fun unwrap(): ScmFailure = failure
+}
+
+/**
+ * Typed scripted response — success or failure — used by [FakeScmSource] queues.
+ * Generics allow the queue to be typed per operation without unchecked casts.
+ */
+private sealed interface Scripted<out S, out F>
+private data class ScriptedSuccess<S, F>(val result: S) : Scripted<S, F>
+private data class ScriptedFailure<S, F>(val failure: F) : Scripted<S, F>

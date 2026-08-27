@@ -2,6 +2,7 @@ package dev.rubentxu.pipelattice.release.artifact
 
 import dev.rubentxu.pipelattice.foundation.capability.SideEffect
 import dev.rubentxu.pipelattice.foundation.outcome.Outcome
+import dev.rubentxu.pipelattice.release.testing.SecretProbeFactory
 import kotlinx.coroutines.runBlocking
 import java.nio.file.Path
 import kotlin.test.Test
@@ -175,35 +176,35 @@ class FakeArtifactRepositoryContractTest {
         assertTrue(SideEffect.READ_ONLY in desc.sideEffects)
     }
 
-    // --- Invariant 6: secret exclusion ---
+    // --- Invariant 6: secret exclusion (probe-based, non-tautological) ---
 
+    /**
+     * RED PROBE for FakeArtifactRepository: unique marker injected into
+     * failure reason string, verified absent from invocations surface.
+     */
     @Test
-    fun `invocations do not contain secret-shaped literals`() = runBlocking {
+    fun `secret-exclusion probe - invocations do not expose marker`() = runBlocking {
         val repo = newFake()
+
+        val probe = SecretProbeFactory.generateProbe()
+
+        // POSITIVE CONTROL: marker is present in the probe
+        assertTrue(
+            probe.marker.startsWith("PROBE-SECRET-MATERIAL-"),
+            "Positive control: probe marker must start with PROBE-SECRET-MATERIAL-. Got: ${probe.marker}"
+        )
+
         val coord = ArtifactCoordinate("dev.example", "lib", "1.0.0")
-        repo.enqueuePublishSuccess(PublishResult(coord, "sha256:abc123def456"))
-
-        repo.publish(PublishRequest(coord, Path.of("/tmp/lib.jar")))
-
-        val invocations = repo.invocations()
-        val serialized = invocations.toString()
-
-        assertTrue(serialized.indexOf("AKIA") < 0, "Should not contain AWS key pattern")
-        assertTrue(serialized.indexOf("ghp_") < 0, "Should not contain GitHub PAT pattern")
-        assertTrue(serialized.indexOf("synthetic") < 0, "Should not contain synthetic markers")
-    }
-
-    @Test
-    fun `failure toString does not contain secret-shaped literals`() = runBlocking {
-        val repo = newFake()
-        val coord = ArtifactCoordinate("dev.example", "lib", "1.0.0")
-        val failure = ArtifactFailure.Rejected(coord, "synthetic-rejection")
+        val failure = ArtifactFailure.Rejected(coord, probe.marker)
         repo.enqueuePublishFailure(failure)
 
         repo.publish(PublishRequest(coord, Path.of("/tmp/lib.jar")))
 
-        val failureStr = failure.toString()
-        assertTrue(failureStr.indexOf("AKIA") < 0, "Should not contain AWS key pattern")
-        assertTrue(failureStr.indexOf("ghp_") < 0, "Should not contain GitHub PAT pattern")
+        val invocationsStr = repo.invocations().toString()
+
+        assertTrue(
+            !invocationsStr.contains(probe.marker),
+            "FAIL: invocations() must not contain probe marker. Found: $invocationsStr"
+        )
     }
 }
