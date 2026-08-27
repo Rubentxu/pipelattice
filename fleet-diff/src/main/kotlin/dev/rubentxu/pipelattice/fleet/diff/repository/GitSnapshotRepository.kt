@@ -62,7 +62,7 @@ public class GitSnapshotRepository(
         }
 
         val repo = FileRepositoryBuilder()
-            .setGitDir(workingDir.toFile())
+            .setGitDir(gitDir)
             .readEnvironment()
             .findGitDir()
             .build()
