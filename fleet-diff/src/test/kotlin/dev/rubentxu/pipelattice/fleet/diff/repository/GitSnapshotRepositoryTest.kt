@@ -1,5 +1,7 @@
 package dev.rubentxu.pipelattice.fleet.diff.repository
 
+import dev.rubentxu.pipelattice.compiler.parse.YamlResourceParser
+import dev.rubentxu.pipelattice.fleet.diff.cache.SnapshotDiskCache
 import dev.rubentxu.pipelattice.fleet.diff.cli.Main
 import dev.rubentxu.pipelattice.fleet.diff.domain.SnapshotRepository
 import org.eclipse.jgit.api.Git
@@ -407,9 +409,11 @@ class GitSnapshotRepositoryTest {
             git.commit().setMessage("initial").call()
         }
 
-        // Should compile and construct without ProcessRunner
+        // Should compile and construct without ProcessRunner (FARCH-016)
+        // Uses YamlResourceParser as production default + in-memory cache (defaultFor uses temp dir)
         val factory = GitSnapshotFactory()
-        val repo = GitSnapshotRepository(gitDir, factory)
+        val cache = SnapshotDiskCache(Path.of("/tmp/test-cache-${System.nanoTime()}"))
+        val repo = GitSnapshotRepository(gitDir, resourceParser = YamlResourceParser(), snapshotFactory = factory, cache = cache)
 
         val snapshot = repo.load("HEAD")
         assertNotNull(snapshot)
