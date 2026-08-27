@@ -12,12 +12,10 @@ import dev.rubentxu.pipelattice.compose.translate.CompositionToGraphTranslator
 import dev.rubentxu.pipelattice.fleet.diff.cache.SnapshotDiskCache
 import dev.rubentxu.pipelattice.fleet.diff.domain.SnapshotRepository
 import dev.rubentxu.pipelattice.fleet.diff.ports.GitRefResolution
-import dev.rubentxu.pipelattice.foundation.diagnostics.DiagnosticSink
 import dev.rubentxu.pipelattice.graph.domain.Edge
 import dev.rubentxu.pipelattice.graph.domain.GraphNode
 import dev.rubentxu.pipelattice.graph.domain.GraphSnapshot
 import dev.rubentxu.pipelattice.resource.PipelineDefinitionResource
-import dev.rubentxu.pipelattice.resource.PipelineProfileResource
 import dev.rubentxu.pipelattice.resource.ResourceParser
 import dev.rubentxu.pipelattice.resource.SourceDocument
 import org.eclipse.jgit.errors.AmbiguousObjectException
@@ -235,38 +233,11 @@ public class GitSnapshotRepository(
             parsedSources.addAll(result.resources)
         }
 
-        // Build catalog from profile resources.
-        // CRITICAL: we must use the ORIGINAL SourceDocument content (with actual YAML),
-        // not empty strings. The SimpleRepositoryCatalogSource was incorrectly creating
-        // empty-content documents, which caused ImportResolver.resolve() to fail because
-        // the parser would fail on empty content and return null, breaking the import chain.
-        // Fix: build a map from profile metadata name -> original SourceDocument.
-        // Then derive the catalog ref from the source path: "profiles/java.yaml" -> "catalog://profiles/java".
-        // This catalog ref is what ImportResolver.resolve() will look up.
-        val sourceByMetadataName = mutableMapOf<String, SourceDocument>()
-        for (source in sources) {
-            val result = resourceParser.parse(source)
-            for (resource in result.resources) {
-                if (resource is PipelineProfileResource) {
-                    sourceByMetadataName[resource.metadata.name] = source
-                }
-            }
-        }
-
-        val profileRefs = parsedSources
-            .filterIsInstance<PipelineProfileResource>()
-            .mapNotNull { profile ->
-                val originalSource = sourceByMetadataName[profile.metadata.name]
-                    ?: return@mapNotNull null
-                // Derive catalog ref from file path: "profiles/java.yaml" -> "catalog://profiles/java"
-                val catalogRef = dev.rubentxu.pipelattice.foundation.ResourceRef.parse(
-                    "catalog://${originalSource.path.removeSuffix(".yaml").removeSuffix(".yml")}"
-                )
-                catalogRef to originalSource
-            }
-            .toMap()
-
-        val catalogSource = SimpleRepositoryCatalogSource(profileRefs)
+        // Build catalog from profile resources using the shared builder.
+        // Uses ORIGINAL SourceDocument content (not empty strings) to ensure
+        // ImportResolver can parse and resolve import chains correctly.
+        val profileCatalog = buildProfileCatalog(sources, resourceParser)
+        val catalogSource = SimpleCatalogSource(profileCatalog)
 
         // Collect all edges from composition results
         val allEdges = mutableSetOf<Edge>()
@@ -319,13 +290,3 @@ private class NoOpCompositionEngine : CompositionEngine {
     }
 }
 
-/**
- * Simple catalog source for repository use.
- */
-private class SimpleRepositoryCatalogSource(
-    private val documents: Map<dev.rubentxu.pipelattice.foundation.ResourceRef, SourceDocument>
-) : CatalogSource {
-    override fun resolve(ref: dev.rubentxu.pipelattice.foundation.ResourceRef, sink: DiagnosticSink): SourceDocument? {
-        return documents[ref]
-    }
-}

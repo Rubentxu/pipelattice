@@ -2,14 +2,13 @@ package dev.rubentxu.pipelattice.fleet.diff.domain
 
 import dev.rubentxu.pipelattice.compose.CompositionEngine
 import dev.rubentxu.pipelattice.compose.domain.CompositionRequest
-import dev.rubentxu.pipelattice.compose.domain.CompositionResult
-import dev.rubentxu.pipelattice.compose.ports.CatalogSource
 import dev.rubentxu.pipelattice.compose.ports.ProvenanceSink
 import dev.rubentxu.pipelattice.foundation.ResourceRef
 import dev.rubentxu.pipelattice.foundation.diagnostics.DiagnosticSeverity
+import dev.rubentxu.pipelattice.fleet.diff.repository.SimpleCatalogSource
+import dev.rubentxu.pipelattice.fleet.diff.repository.buildProfileCatalog
 import dev.rubentxu.pipelattice.graph.domain.GraphSnapshot
 import dev.rubentxu.pipelattice.resource.PipelineDefinitionResource
-import dev.rubentxu.pipelattice.resource.PipelineProfileResource
 import dev.rubentxu.pipelattice.resource.ResourceParser
 import dev.rubentxu.pipelattice.resource.SourceDocument
 
@@ -72,15 +71,14 @@ public class CompileAffectedValidator(
             parsedSources.addAll(result.resources)
         }
 
-        // Build catalog from profile resources
-        val profileRefs = parsedSources
-            .filterIsInstance<PipelineProfileResource>()
-            .associate {
-                ResourceRef.parse("catalog://${it.metadata.name}") to
-                    SourceDocument("catalog://${it.metadata.name}", "")
-            }
-
-        val catalogSource = SimpleValidatorCatalogSource(profileRefs)
+        // Build catalog from profile resources using ORIGINAL SourceDocument content.
+        // CRITICAL: we must use the actual YAML content, not empty strings.
+        // buildProfileCatalog derives the catalog ref from the source file path
+        // (e.g. "profiles/java.yaml" -> "catalog://profiles/java") and stores the
+        // original document. This ensures ImportResolver can parse the content and
+        // resolve import chains correctly.
+        val profileCatalog = buildProfileCatalog(candidateSources, resourceParser)
+        val catalogSource = SimpleCatalogSource(profileCatalog)
 
         // Get pipeline definition resources for affected projects
         val affectedPipelines = parsedSources
@@ -127,13 +125,3 @@ public class CompileAffectedValidator(
     }
 }
 
-/**
- * Simple catalog source for validator use.
- */
-private class SimpleValidatorCatalogSource(
-    private val documents: Map<ResourceRef, SourceDocument>
-) : CatalogSource {
-    override fun resolve(ref: ResourceRef, sink: dev.rubentxu.pipelattice.foundation.diagnostics.DiagnosticSink): SourceDocument? {
-        return documents[ref]
-    }
-}
