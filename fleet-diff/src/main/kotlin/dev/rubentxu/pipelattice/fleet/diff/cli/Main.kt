@@ -64,16 +64,27 @@ public object Main {
     public fun run(args: Array<String>): Int = try {
         execute(args)
         EXIT_SUCCESS
-    } catch (e: MissingArgumentException) {
-        System.err.println("usage error: ${e.message}")
-        System.err.println("Usage: fleet-diff --baseline <ref> --candidate <ref> [--output <path>]")
-        EXIT_USAGE
-    } catch (e: IllegalArgumentException) {
-        System.err.println("validation error: ${e.message}")
-        EXIT_VALIDATION
     } catch (e: Exception) {
-        System.err.println("internal error: ${e.message}")
-        EXIT_INTERNAL
+        val result = mapExceptionToExit(e)
+        System.err.println(result.message)
+        result.code
+    }
+
+    private data class ExitResult(val code: Int, val message: String)
+
+    private fun mapExceptionToExit(e: Exception): ExitResult = when (e) {
+        is MissingArgumentException -> ExitResult(
+            EXIT_USAGE,
+            "usage error: ${e.message}\nUsage: fleet-diff --baseline <ref> --candidate <ref> [--output <path>]"
+        )
+        is IllegalArgumentException -> ExitResult(
+            EXIT_VALIDATION,
+            "validation error: ${e.message}"
+        )
+        else -> ExitResult(
+            EXIT_INTERNAL,
+            "internal error: ${e.message}"
+        )
     }
 
     /**
