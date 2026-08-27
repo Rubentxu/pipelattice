@@ -1,8 +1,6 @@
 package dev.rubentxu.pipelattice.fleet.diff.domain
 
-import dev.rubentxu.pipelattice.graph.domain.Edge
 import dev.rubentxu.pipelattice.graph.domain.EdgeKind
-import dev.rubentxu.pipelattice.graph.domain.GraphChangeSet
 import dev.rubentxu.pipelattice.graph.domain.GraphNode
 import dev.rubentxu.pipelattice.graph.domain.GraphSnapshot
 import dev.rubentxu.pipelattice.graph.domain.StructuralDiff
@@ -14,10 +12,19 @@ import dev.rubentxu.pipelattice.graph.ports.GraphProjectionStore
  * Takes a [SnapshotRepository] (for loading named snapshots) and a
  * [GraphProjectionStore] (for computing affected subgraphs) and produces
  * a [FleetDiffReport] with seven sections.
+ *
+ * ## m16 additions
+ * - Plan validation pass via [compileAffectedValidator] populates [invalidPlans]
+ *   as the PRIMARY signal; the removed-edge heuristic becomes secondary.
+ * - Policy violations via [policySource] seam (empty in m16; spec-M3 deferred).
  */
 public class FleetCandidateDiff(
     private val snapshotRepo: SnapshotRepository,
     private val graphStore: GraphProjectionStore,
+    private val policySource: PolicyViolationSource = PolicyViolationSource(snapshotRepo),
+    private val compileAffectedValidator: CompileAffectedValidator = CompileAffectedValidator(
+        dev.rubentxu.pipelattice.compose.DefaultCompositionEngine()
+    ),
 ) {
 
     /**
@@ -36,20 +43,35 @@ public class FleetCandidateDiff(
 
         val affected = computeAffected(baselineSnapshot, candidateSnapshot)
         val effective = computeEffective(affected)
-        val invalid = computeInvalid(baselineSnapshot, effective)
-        val newViolations = (candidateSnapshot.policyViolations() - baselineSnapshot.policyViolations()).toList()
-        val resolved = (baselineSnapshot.policyViolations() - candidateSnapshot.policyViolations()).toList()
+
+        // Primary signal: compile-affected validation
+        val affectedProjects = affected.affectedNodes.filterIsInstance<GraphNode.Project>().toSet()
+        val primaryInvalidPlans = compileAffectedValidator(affectedProjects.map { it.id }.toSet())
+
+        // Secondary signal: removed-edge heuristic (for backward compatibility)
+        val (secondaryInvalidPlans, secondaryHeuristicReport) = computeSecondaryHeuristic(baselineSnapshot, effective)
+
+        // Merge primary and secondary (secondary is flagged in report for consumer awareness)
+        val allInvalidPlans = primaryInvalidPlans + secondaryInvalidPlans
+
+        // Policy violations via seam (empty in m16; D4 debt item)
+        val baselineViolations = policySource()
+        val candidateViolations = policySource()
+        val newViolations = (candidateViolations - baselineViolations).toList()
+        val resolved = (baselineViolations - candidateViolations).toList()
+
         val providerChanges = effective.filterByKind(EdgeKind.GOVERNED_BY)
         val localOverrides = effective.filterByKind(EdgeKind.OVERRIDES)
 
         return FleetDiffReport(
-            affectedProjects = affected.affectedNodes.filterIsInstance<GraphNode.Project>().toSet(),
+            affectedProjects = affectedProjects.toSet(),
             effectiveChanges = effective,
-            invalidPlans = invalid,
+            invalidPlans = allInvalidPlans,
             newPolicyViolations = newViolations,
             resolvedPolicyViolations = resolved,
             providerChanges = providerChanges,
             localOverrides = localOverrides,
+            secondaryHeuristic = secondaryHeuristicReport,
         )
     }
 
@@ -89,13 +111,18 @@ public class FleetCandidateDiff(
     }
 
     /**
-     * Computes invalid plans from the effective changes.
+     * Computes invalid plans from the removed-edge heuristic (secondary signal).
      *
      * A plan is invalid if its project was affected by removed edges.
      * For SELECTS/IMPORTS edges, the affected node is the target (Project).
      * For OVERRIDES/PATCHES edges, the affected node is the source (Project).
+     *
+     * Returns a pair of (secondary invalid plans, secondary heuristic report).
      */
-    private fun computeInvalid(baseline: GraphSnapshot, effective: List<FleetDiffChange>): Set<PlanReference> {
+    private fun computeSecondaryHeuristic(
+        baseline: GraphSnapshot,
+        effective: List<FleetDiffChange>,
+    ): Pair<Set<PlanReference>, SecondaryHeuristicReport> {
         val removedSelectsOrImports = effective.filterIsInstance<FleetDiffChange.Removed>()
             .filter { it.kind in setOf(EdgeKind.SELECTS, EdgeKind.IMPORTS, EdgeKind.REQUIRES) }
             .map { it.target }
@@ -112,25 +139,20 @@ public class FleetCandidateDiff(
 
         val affectedProjectIds = removedSelectsOrImports + removedOverridesOrPatches
 
-        return baseline.nodes
+        val secondaryPlans = baseline.nodes
             .filterIsInstance<GraphNode.ResolvedPipelinePlan>()
             .filter { plan -> plan.projectId in affectedProjectIds }
             .map { PlanReference(it.projectId, it.planDigest) }
             .toSet()
+
+        val secondaryReport = SecondaryHeuristicReport(
+            invalidPlanIds = affectedProjectIds.toList()
+        )
+
+        return secondaryPlans to secondaryReport
     }
 
     private fun List<FleetDiffChange>.filterByKind(kind: EdgeKind): List<FleetDiffChange> {
         return filter { it.kind == kind }
-    }
-
-    /**
-     * Extracts policy violations from a snapshot.
-     *
-     * A-min provides a stub returning empty; full implementation deferred
-     * to when the compiler emits violation data.
-     */
-    private fun GraphSnapshot.policyViolations(): Set<PolicyViolation> {
-        // A-min stub: no policy violations tracked yet
-        return emptySet()
     }
 }
