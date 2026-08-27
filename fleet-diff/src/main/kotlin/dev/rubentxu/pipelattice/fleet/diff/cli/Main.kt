@@ -1,28 +1,41 @@
 package dev.rubentxu.pipelattice.fleet.diff.cli
 
+import dev.rubentxu.pipelattice.build.facade.DefaultProcessRunner
 import dev.rubentxu.pipelattice.fleet.diff.domain.FleetCandidateDiff
 import dev.rubentxu.pipelattice.fleet.diff.json.FleetDiffJsonEncoder
+import dev.rubentxu.pipelattice.fleet.diff.repository.GitSnapshotRepository
 import dev.rubentxu.pipelattice.fleet.diff.repository.InMemorySnapshotRepository
 import dev.rubentxu.pipelattice.graph.domain.GraphSnapshot
 import dev.rubentxu.pipelattice.graph.domain.PlanFingerprint
 import dev.rubentxu.pipelattice.graph.store.InMemoryGraphProjectionStore
+import java.nio.file.Path
 
 /**
  * CLI entry point for the fleet-diff tool.
  *
  * Usage:
  *   fleet-diff --baseline <ref> --candidate <ref> [--output <path>]
+ *   fleet-diff --base <ref> --candidate <ref> [--repo <path>]
  *
  * Arguments:
- *   --baseline   Required. Reference to the baseline snapshot.
+ *   --baseline   Required (legacy). Reference to the baseline snapshot.
+ *   --base       Required (alias for --baseline). Reference to the baseline snapshot.
  *   --candidate  Required. Reference to the candidate snapshot.
  *   --output     Optional. Output file path. Defaults to stdout.
+ *   --repo       Optional. Path to a git repository. Defaults to "." (identity path).
+ *                When "." or absent, uses an in-memory identity repository.
+ *                When a valid git repo path, uses GitSnapshotRepository to resolve
+ *                refs via the git CLI.
  *
  * Exit codes (per pipelattice-spec/docs/17_CLI_CONTROL_PLANE.md §4 + BSD sysexits.h):
  *   0  success
  *   2  validation failure (e.g. snapshot ref not found in repository)
- *   10 internal error (unexpected exception)
+ *   10 internal error (unexpected exception, e.g. GitRepositoryUnavailableException)
  *   64 command line usage error (missing required flag)
+ *
+ * ## Example
+ *   pipelattice diff --base main --candidate pr/123
+ *   pipelattice diff --repo /path/to/repo --base HEAD~1 --candidate HEAD
  */
 public object Main {
 
@@ -70,14 +83,32 @@ public object Main {
      * in the public entry point.
      */
     private fun execute(args: Array<String>) {
-        val baselineRef = args.extract("--baseline").required("--baseline")
-        val candidateRef = args.extract("--candidate").required("--candidate")
-        val outputPath = args.extract("--output")
+        // --base is first-wins alias for --baseline
+        val baselineRef = (extract(args, "--base") ?: extract(args, "--baseline")).required("--baseline or --base")
+        val candidateRef = extract(args, "--candidate").required("--candidate")
+        val outputPath = extract(args, "--output")
+        val repoPath = extract(args, "--repo") ?: "."
 
-        val repo = InMemorySnapshotRepository()
+        val repo: InMemorySnapshotRepository
+        if (repoPath == ".") {
+            // Identity path: store synthetic snapshots at traditional "baseline"/"candidate" keys
+            // User-provided refs are used for LOADING, not storing
+            repo = InMemorySnapshotRepository()
+            storeSynthetic(repo)
+        } else {
+            // Git path: use GitSnapshotRepository to resolve refs via git CLI
+            val gitRepo = GitSnapshotRepository(Path.of(repoPath), DefaultProcessRunner())
+            repo = InMemorySnapshotRepository()
+            // Load baseline and candidate from git and store in the in-memory repo
+            val baselineSnap = gitRepo.load(baselineRef)
+                ?: throw IllegalArgumentException("Baseline snapshot not found: $baselineRef")
+            val candidateSnap = gitRepo.load(candidateRef)
+                ?: throw IllegalArgumentException("Candidate snapshot not found: $candidateRef")
+            repo.store(baselineRef, baselineSnap)
+            repo.store(candidateRef, candidateSnap)
+        }
+
         val store = InMemoryGraphProjectionStore()
-
-        loadSnapshots(repo)
 
         val report = FleetCandidateDiff(repo, store).diff(baselineRef, candidateRef)
         val json = FleetDiffJsonEncoder.encode(report)
@@ -90,11 +121,15 @@ public object Main {
     }
 
     /**
-     * Loads sample snapshots for demonstration.
+     * Stores synthetic baseline and candidate snapshots for the identity path.
      *
-     * In a real implementation, this would load from a catalog or build artifact.
+     * These are placeholder snapshots with deterministic fingerprints used when
+     * no `--repo` is provided (legacy M9 behavior preserved for CLI hermetic testing).
+     *
+     * The identity path ALWAYS stores at "baseline"/"candidate" keys, regardless of
+     * user-provided ref names. User-provided refs are used only for loading.
      */
-    private fun loadSnapshots(repo: InMemorySnapshotRepository) {
+    private fun storeSynthetic(repo: InMemorySnapshotRepository) {
         val baselineSnap = GraphSnapshot(
             nodes = emptySet(),
             edges = emptySet(),
@@ -110,10 +145,19 @@ public object Main {
         repo.store("candidate", candidateSnap)
     }
 
-    internal fun Array<String>.extract(flag: String): String? {
-        val index = indexOf(flag)
-        return if (index >= 0 && index + 1 < size) {
-            this[index + 1]
+    /**
+     * Extracts the value of a flag from command-line arguments.
+     *
+     * Exposed as a public method on [Main] so tests can verify flag parsing.
+     *
+     * @param args The command-line arguments.
+     * @param flag The flag to look for (e.g., "--baseline", "--base").
+     * @return The value following the flag, or null if the flag is absent.
+     */
+    public fun extract(args: Array<String>, flag: String): String? {
+        val index = args.indexOf(flag)
+        return if (index >= 0 && index + 1 < args.size) {
+            args[index + 1]
         } else {
             null
         }

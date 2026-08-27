@@ -79,4 +79,18 @@ class CliMainArgsTest {
 
         assertTrue(report.affectedProjects.isEmpty())
     }
+
+    @Test
+    fun `--base alias returns same value as --baseline`() {
+        // --base is first-wins alias for --baseline
+        // When --base B is provided, --baseline is not used
+        val argsWithBase = arrayOf("--base", "baseline", "--candidate", "candidate")
+        assertEquals("baseline", Main.extract(argsWithBase, "--base"))
+        assertEquals(null, Main.extract(argsWithBase, "--baseline"))
+
+        // --base baseline --candidate candidate with identity path exits 0
+        // (same as --baseline baseline --candidate candidate)
+        val code = Main.run(argsWithBase)
+        assertEquals(Main.EXIT_SUCCESS, code)
+    }
 }
