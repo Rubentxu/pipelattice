@@ -233,5 +233,23 @@ class ArchitectureFitnessTest {
         ).check(imported)
     }
 
+    @ArchTest
+    fun `FLEET-001 - fleet-diff depends only on ResourceParser port`(imported: JavaClasses) {
+        // fleet-diff must depend only on the ResourceParser fun interface (port),
+        // NOT on the concrete YamlResourceParser implementation.
+        // This is the FARCH-005 boundary for m15 content emission.
+        val rule = noClasses()
+            .that().resideInAPackage("dev.rubentxu.pipelattice.fleet.diff..")
+            .should().dependOnClassesThat()
+            .resideInAnyPackage("dev.rubentxu.pipelattice.compiler.parse.YamlResourceParser")
+        rule.allowEmptyShould(true)
+        rule.because(
+            "fleet-diff must not depend on YamlResourceParser concrete class (FARCH-005/FARCH-014 boundary); " +
+                "it must use only the ResourceParser fun interface port. " +
+                "The default constructor uses YamlResourceParser() only as a production convenience argument, " +
+                "but production code never imports the concrete type.",
+        ).check(imported)
+    }
+
     private fun rule(definition: ArchRule, because: String): ArchRule = definition.because(because)
 }
