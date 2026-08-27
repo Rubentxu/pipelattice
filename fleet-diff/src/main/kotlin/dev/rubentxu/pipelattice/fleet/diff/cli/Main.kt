@@ -24,7 +24,7 @@ import java.nio.file.Path
  *   --repo       Optional. Path to a git repository. Defaults to "." (identity path).
  *                When "." or absent, uses an in-memory identity repository.
  *                When a valid git repo path, uses GitSnapshotRepository to resolve
- *                refs via the git CLI.
+ *                refs via JGit tree walk + ResourceParser port + disk cache.
  *
  * Exit codes (per pipelattice-spec/docs/17_CLI_CONTROL_PLANE.md §4 + BSD sysexits.h):
  *   0  success

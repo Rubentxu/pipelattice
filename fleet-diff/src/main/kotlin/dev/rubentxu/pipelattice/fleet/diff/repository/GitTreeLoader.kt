@@ -4,7 +4,7 @@ import dev.rubentxu.pipelattice.resource.SourceDocument
 import org.eclipse.jgit.lib.Repository
 import org.eclipse.jgit.revwalk.RevCommit
 import org.eclipse.jgit.treewalk.TreeWalk
-import java.nio.charset.Charsets
+import java.nio.charset.StandardCharsets
 
 /**
  * Loads YAML source documents from a git commit via JGit tree walk.
@@ -58,7 +58,7 @@ public class GitTreeLoader(private val repo: Repository) {
                 if (ext !in YAML_EXTENSIONS) continue
 
                 val blobId = walk.getObjectId(0)
-                val content = repo.open(blobId).bytes.decodeToString(Charsets.UTF_8.name())
+                val content = String(repo.open(blobId).bytes, StandardCharsets.UTF_8)
 
                 documents.add(SourceDocument(path = pathString, content = content))
 

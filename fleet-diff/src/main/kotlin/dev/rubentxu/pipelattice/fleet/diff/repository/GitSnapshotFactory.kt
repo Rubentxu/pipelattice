@@ -76,7 +76,7 @@ public class GitSnapshotFactory {
         }.toSet()
 
         // Content-derived fingerprint: domain-tagged, includes input-hash
-        val fingerprintValue = sha256("graph-content/v1:${resolution.sha}:$inputHash")
+        val fingerprintValue = sha256Hex("graph-content/v1:${resolution.sha}:$inputHash")
 
         return GraphSnapshot(
             nodes = nodes,

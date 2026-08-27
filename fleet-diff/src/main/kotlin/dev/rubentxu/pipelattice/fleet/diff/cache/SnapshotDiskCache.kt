@@ -1,6 +1,6 @@
 package dev.rubentxu.pipelattice.fleet.diff.cache
 
-import dev.rubentxu.pipelattice.fleet.diff.repository.SourceDocument
+import dev.rubentxu.pipelattice.resource.SourceDocument
 import dev.rubentxu.pipelattice.foundation.ResourceRef
 import dev.rubentxu.pipelattice.graph.domain.Edge
 import dev.rubentxu.pipelattice.graph.domain.EdgeKind
@@ -226,12 +226,47 @@ public object GraphSnapshotSerializer {
         if (edges.isEmpty()) return "[]"
         return buildString {
             append("[")
-            edges.sortedBy { "${it.source.toCanonical()}|${it.target.toCanonical()}|${it.kind.name}" }.mapIndexed { index, edge ->
+            edges.sortedBy { "${it.source.toCanonical()}|${it.target.toCanonical()}|${edgeKindToString(it.kind)}" }.mapIndexed { index, edge ->
                 if (index > 0) append(",")
-                append("{\"source\":${encodeNode(edge.source)},\"target\":${encodeNode(edge.target)},\"kind\":\"${edge.kind.name}\"}")
+                append("{\"source\":${encodeNode(edge.source)},\"target\":${encodeNode(edge.target)},\"kind\":\"${edgeKindToString(edge.kind)}\"}")
             }
             append("]")
         }
+    }
+
+    private fun edgeKindToString(kind: EdgeKind): String = when (kind) {
+        EdgeKind.IMPORTS -> "IMPORTS"
+        EdgeKind.EXTENDS -> "EXTENDS"
+        EdgeKind.SELECTS -> "SELECTS"
+        EdgeKind.OVERRIDES -> "OVERRIDES"
+        EdgeKind.PATCHES -> "PATCHES"
+        EdgeKind.DERIVED_FROM -> "DERIVED_FROM"
+        EdgeKind.USES -> "USES"
+        EdgeKind.REQUIRES -> "REQUIRES"
+        EdgeKind.PROVIDES -> "PROVIDES"
+        EdgeKind.GOVERNED_BY -> "GOVERNED_BY"
+        EdgeKind.TARGETS -> "TARGETS"
+        EdgeKind.PRODUCES -> "PRODUCES"
+        EdgeKind.CONSUMES -> "CONSUMES"
+        EdgeKind.COMPILES_TO -> "COMPILES_TO"
+    }
+
+    private fun edgeKindFromString(s: String): EdgeKind = when (s) {
+        "IMPORTS" -> EdgeKind.IMPORTS
+        "EXTENDS" -> EdgeKind.EXTENDS
+        "SELECTS" -> EdgeKind.SELECTS
+        "OVERRIDES" -> EdgeKind.OVERRIDES
+        "PATCHES" -> EdgeKind.PATCHES
+        "DERIVED_FROM" -> EdgeKind.DERIVED_FROM
+        "USES" -> EdgeKind.USES
+        "REQUIRES" -> EdgeKind.REQUIRES
+        "PROVIDES" -> EdgeKind.PROVIDES
+        "GOVERNED_BY" -> EdgeKind.GOVERNED_BY
+        "TARGETS" -> EdgeKind.TARGETS
+        "PRODUCES" -> EdgeKind.PRODUCES
+        "CONSUMES" -> EdgeKind.CONSUMES
+        "COMPILES_TO" -> EdgeKind.COMPILES_TO
+        else -> throw IllegalArgumentException("Unknown EdgeKind: $s")
     }
 
     private fun escape(s: String): String {
@@ -355,7 +390,7 @@ public object GraphSnapshotSerializer {
         val sourceJson = json.substringAfter("\"source\":").substringBefore("\"target\":")
         val targetJson = json.substringAfter("\"target\":").substringBefore("\"kind\":")
         val kindStr = json.substringAfter("\"kind\":\"").substringBefore('"')
-        val kind = EdgeKind.valueOf(kindStr)
+        val kind = edgeKindFromString(kindStr)
         return Edge(
             source = decodeNode(sourceJson.trim()),
             target = decodeNode(targetJson.trim()),
