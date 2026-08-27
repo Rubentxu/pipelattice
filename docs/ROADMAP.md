@@ -9,6 +9,10 @@ _None — next milestone (M8+ slices) will be defined when triggered by user req
 
 ## Recently Closed Milestones
 
+- **m14-migrate-to-jgit** (v0.9.0, 2026-08-27, 9568381) — Replace subprocess git transport in fleet-diff with JGit 6.10.1. Behavior byte-identical (exit codes 0/2/10/64, SHA fingerprints, stderr format). FARCH-016 v2 byte-code guard retired; FARCH-016 v1 package-list rule preserved with R7 residual gap documented. CliGitIntegrationTest promoted from slow tier to default tier (no external git binary needed). 9 commits, 62 tests green (49 fleet-diff + 13 arch). Orchestrator-corrective rounds: 1-line FileRepositoryBuilder.setGitDir fix, RefDatabase.getRefsByPrefix pre-check for branch+tag collision, history rewrite for author identity.
+  New in m14: `org.eclipse.jgit:org.eclipse.jgit:6.10.1.202505221210-r` added to `:fleet-diff`; `GitSnapshotRepository` rewritten from subprocess `git -C ... rev-parse` to JGit `Repository.resolve()` + `RevWalk.parseCommit()`; `ProcessRunner` constructor param dropped; `RefDatabase.getRefsByPrefix()` pre-check added for ambiguous-ref detection; `NoSystemExitCallCondition.kt` + `Farch016RedRegressionTest.kt` deleted; `CliGitIntegrationTest` `@Tag("slow")` + `@EnabledIf` removed.
+  Cycle artifacts in `~/.local/share/sddk/projects/p-4c8272c9e7dcdfa2/cycle-artifacts/p-4c8272c9e7dcdfa2/m14-migrate-to-jgit/`.
+
 - **m13-inc011-exit-table** (v0.8.2, 2026-08-27, 5ee6cb3) — Refactor stacked catch handlers in fleet-diff CLI run() to table-driven ExitResult mapping. Behavior byte-identical (catch restored to Exception, Error subclasses propagate). Post-verify R1 amend+force-push pattern documented. 1 commit, 327/16 tests green, slow tier deferred.
   New in m13: `ExitResult` data class + `mapExceptionToExit()` private helper replaces 3 stacked catch blocks; single `catch (e: Exception)` delegates to table-driven when-expression; INC-011 closed.
   Cycle artifacts in `~/.local/share/sddk/projects/p-4c8272c9e7dcdfa2/cycle-artifacts/p-4c8272c9e7dcdfa2/m13-inc011-exit-table/`.
