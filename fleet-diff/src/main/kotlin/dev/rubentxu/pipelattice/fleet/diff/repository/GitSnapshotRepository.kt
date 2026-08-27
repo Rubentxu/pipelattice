@@ -1,11 +1,25 @@
 package dev.rubentxu.pipelattice.fleet.diff.repository
 
 import dev.rubentxu.pipelattice.compiler.parse.YamlResourceParser
+import dev.rubentxu.pipelattice.compose.CompositionEngine
+import dev.rubentxu.pipelattice.compose.domain.CompositionRequest
+import dev.rubentxu.pipelattice.compose.domain.CompositionResult
+import dev.rubentxu.pipelattice.compose.domain.ExplainResult
+import dev.rubentxu.pipelattice.compose.ports.CatalogSource
+import dev.rubentxu.pipelattice.compose.ports.ProvenanceSink
+import dev.rubentxu.pipelattice.compose.translate.CompositionToGraphTranslator
 import dev.rubentxu.pipelattice.fleet.diff.cache.SnapshotDiskCache
 import dev.rubentxu.pipelattice.fleet.diff.domain.SnapshotRepository
 import dev.rubentxu.pipelattice.fleet.diff.ports.GitRefResolution
+import dev.rubentxu.pipelattice.foundation.diagnostics.DiagnosticSink
+import dev.rubentxu.pipelattice.foundation.diagnostics.DiagnosticSeverity
+import dev.rubentxu.pipelattice.graph.domain.Edge
+import dev.rubentxu.pipelattice.graph.domain.GraphNode
 import dev.rubentxu.pipelattice.graph.domain.GraphSnapshot
+import dev.rubentxu.pipelattice.resource.PipelineDefinitionResource
+import dev.rubentxu.pipelattice.resource.PipelineProfileResource
 import dev.rubentxu.pipelattice.resource.ResourceParser
+import dev.rubentxu.pipelattice.resource.SourceDocument
 import org.eclipse.jgit.errors.AmbiguousObjectException
 import org.eclipse.jgit.errors.IncorrectObjectTypeException
 import org.eclipse.jgit.errors.MissingObjectException
@@ -17,10 +31,11 @@ import java.nio.file.Path
 /**
  * Git-backed [SnapshotRepository] implementation that resolves refs via JGit.
  *
- * ## Content emission (m15)
+ * ## Content emission (m15+v2)
  * This implementation loads YAML files from a git ref via JGit tree walk,
  * parses them through the [ResourceParser] port (not the concrete [YamlResourceParser] class),
- * and emits a real [GraphSnapshot] with content-derived fingerprint. Results are cached
+ * runs the composition engine to emit edges via [CompositionToGraphTranslator], and returns
+ * a real [GraphSnapshot] with content-derived fingerprint (v2 scheme). Results are cached
  * on disk keyed by `<ref-sha>:<input-hash>`.
  *
  * This implementation uses JGit's pure-JVM IO and MUST NOT use `ProcessBuilder`,
@@ -43,6 +58,7 @@ import java.nio.file.Path
  * @param snapshotFactory Factory for creating [GraphSnapshot] from source documents.
  *        Defaults to [GitSnapshotFactory].
  * @param cache Disk cache for resolved snapshots. Defaults to `${XDG_CACHE_HOME:-~/.cache}/pipelattice/fleet-snapshots/<repo-id>/`.
+ * @param compositionEngine Engine for running composition to emit edges. Defaults to no-op.
  * @throws GitRepositoryUnavailableException when the working directory is not a git repository
  *         or the git object store is inaccessible.
  * @see GitSnapshotFactory
@@ -54,11 +70,12 @@ public class GitSnapshotRepository(
     private val resourceParser: ResourceParser = YamlResourceParser(),
     private val snapshotFactory: GitSnapshotFactory = GitSnapshotFactory(),
     private val cache: SnapshotDiskCache = SnapshotDiskCache.defaultFor(workingDir),
+    private val compositionEngine: CompositionEngine = NoOpRepositoryCompositionEngine(),
 ) : SnapshotRepository {
 
     /**
      * Loads a [GraphSnapshot] by resolving the given git ref using JGit,
-     * parsing YAML sources, and caching the result.
+     * parsing YAML sources, running composition for edges, and caching the result.
      *
      * @param ref A git ref (branch, tag, SHA, HEAD, HEAD~N, etc.).
      * @return A content-derived [GraphSnapshot] if the ref resolves and YAML parses successfully,
@@ -124,12 +141,18 @@ public class GitSnapshotRepository(
                 val resolution = GitRefResolution.Resolved(sha)
                 val snapshot = snapshotFactory.create(resolution, sources, resourceParser)
 
-                // Persist on success (snapshot is null on parse error → no cache write)
-                if (snapshot != null) {
-                    cache.put(cacheKey, snapshot)
+                if (snapshot == null) {
+                    return null
                 }
 
-                snapshot
+                // Run composition pass to get edges (m16 v2)
+                val edges = runCompositionPass(sources, resourceParser)
+                val snapshotWithEdges = snapshot.copy(edges = edges)
+
+                // Persist on success
+                cache.put(cacheKey, snapshotWithEdges)
+
+                snapshotWithEdges
             } catch (e: MissingObjectException) {
                 null
             } catch (e: IncorrectObjectTypeException) {
@@ -149,5 +172,82 @@ public class GitSnapshotRepository(
         } finally {
             repo.close()
         }
+    }
+
+    /**
+     * Runs the composition pass over sources to emit graph edges.
+     */
+    private fun runCompositionPass(
+        sources: List<SourceDocument>,
+        resourceParser: ResourceParser,
+    ): Set<Edge> {
+        if (sources.isEmpty()) return emptySet()
+
+        // Parse sources to get parsed resources
+        val parsedSources = mutableListOf<dev.rubentxu.pipelattice.resource.ParsedResource>()
+        for (source in sources) {
+            val result = resourceParser.parse(source)
+            parsedSources.addAll(result.resources)
+        }
+
+        // Build catalog from profile resources
+        val profileRefs = parsedSources
+            .filterIsInstance<PipelineProfileResource>()
+            .associate {
+                dev.rubentxu.pipelattice.foundation.ResourceRef.parse("catalog://${it.metadata.name}") to
+                    SourceDocument("catalog://${it.metadata.name}", "")
+            }
+
+        val catalogSource = SimpleRepositoryCatalogSource(profileRefs)
+
+        // Collect all edges from composition results
+        val allEdges = mutableSetOf<Edge>()
+        val translator = CompositionToGraphTranslator()
+
+        for (resource in parsedSources.filterIsInstance<PipelineDefinitionResource>()) {
+            val request = CompositionRequest(resource)
+            val emptySink = ProvenanceSink {
+                // No-op for edge collection
+            }
+            val result = compositionEngine.compose(request, catalogSource, emptySink)
+            val changeSet = translator.translate(result)
+            allEdges.addAll(changeSet.addedEdges)
+        }
+
+        return allEdges
+    }
+}
+
+/**
+ * No-op composition engine for repository.
+ */
+private class NoOpRepositoryCompositionEngine : CompositionEngine {
+    override fun compose(
+        request: CompositionRequest,
+        catalog: CatalogSource,
+        provenance: ProvenanceSink,
+    ): CompositionResult {
+        return CompositionResult(
+            pipelineId = request.definition.metadata.name,
+            parameters = emptyMap(),
+            provenance = emptyMap(),
+            fingerprint = "",
+            diagnostics = emptyList()
+        )
+    }
+
+    override fun explain(result: CompositionResult, path: String): ExplainResult {
+        return ExplainResult.Miss
+    }
+}
+
+/**
+ * Simple catalog source for repository use.
+ */
+private class SimpleRepositoryCatalogSource(
+    private val documents: Map<dev.rubentxu.pipelattice.foundation.ResourceRef, SourceDocument>
+) : CatalogSource {
+    override fun resolve(ref: dev.rubentxu.pipelattice.foundation.ResourceRef, sink: DiagnosticSink): SourceDocument? {
+        return documents[ref]
     }
 }
