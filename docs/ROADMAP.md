@@ -9,6 +9,24 @@ _None — next milestone (M8+ slices) will be defined when triggered by user req
 
 ## Recently Closed Milestones
 
+- **m10-debt-cleanup** — Status: completed — Closed cycle
+  `p-4c8272c9e7dcdfa2/m10-debt-cleanup`, sequence=96, ledger=97 events,
+  runtime CLOSED on 2026-08-27. Path: **B-direct** (hotfix-style cleanup, 124
+  net LOC). Tag `v0.7.1-m10-debt-cleanup` peels to `a74807c` on main
+  (2 commits over base `dfd9234`, 344/0/0 tests workspace +6 new in
+  `:fleet-diff/cli`, 12/12 arch tests, verify PASS, debt N/A on B-direct).
+  **Closed all 3 outstanding warnings from m9**:
+  (W1) `:fleet-diff/build.gradle.kts` gains `application` plugin + `mainClass`
+  → `./gradlew :fleet-diff:run` task now available;
+  (W2) `cli/Main.kt` refactor extracts `run(args): Int` from `main(args)`,
+  adds `MissingArgumentException`, and maps CLI errors to spec exit codes
+  per `pipelattice-spec/docs/17_CLI_CONTROL_PLANE.md` §4 (0 success / 2
+  validation failure / 10 internal error / 64 EX_USAGE per BSD sysexits.h);
+  (W3) LOC envelope 124 vs ~140 budget — within tolerance, no impl bloat.
+  6 new tests in `CliMainExitCodesTest` cover all four exit codes.
+  Cycle artifacts in
+  `~/.local/share/sddk/projects/p-4c8272c9e7dcdfa2/cycle-artifacts/p-4c8272c9e7dcdfa2/m10-debt-cleanup/`.
+
 - **m9-fleet-candidate-diff** — Status: completed — Closed cycle
   `p-4c8272c9e7dcdfa2/m9-fleet-candidate-diff`, sequence=90, ledger=91 events,
   runtime CLOSED on 2026-08-26. Path: **A-lite** (3 chained slices, ~1090 LOC).
