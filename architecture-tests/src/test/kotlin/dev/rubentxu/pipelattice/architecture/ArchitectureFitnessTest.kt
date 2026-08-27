@@ -271,5 +271,44 @@ class ArchitectureFitnessTest {
         ).check(imported)
     }
 
+    @ArchTest
+    fun `FARCH-017 - release-engine depends only on foundation within pipelattice`(imported: JavaClasses) {
+        val rule = noClasses()
+            .that().resideInAPackage("dev.rubentxu.pipelattice.release..")
+            .should().dependOnClassesThat()
+            .resideInAnyPackage(
+                "dev.rubentxu.pipelattice.build..",
+                "dev.rubentxu.pipelattice.compose..",
+                "dev.rubentxu.pipelattice.graph..",
+                "dev.rubentxu.pipelattice.policy..",
+                "dev.rubentxu.pipelattice.fleet.diff..",
+                "dev.rubentxu.pipelattice.testkit..",
+                "dev.rubentxu.pipelattice.architecture..",
+                "dev.rubentxu.pipelattice.resource..",
+                "dev.rubentxu.pipelattice.config..",
+                "dev.rubentxu.pipelattice.provider..",
+            )
+        rule.allowEmptyShould(true)
+        rule.because(
+            "release-engine must depend only on foundation (per D1, spec §M8); " +
+                "all other pipelattice modules are out of scope for the M8 shell"
+        ).check(imported)
+    }
+
+    @ArchTest
+    fun `FARCH-018 - no secret-shaped literals in production outside foundation secret`(imported: JavaClasses) {
+        // Bytecode rule: no class outside foundation.secret.. may reference credential-shaped literals
+        val rule = noClasses()
+            .that().resideOutsideOfPackage("dev.rubentxu.pipelattice.foundation.secret..")
+            .and().resideInAPackage("dev.rubentxu.pipelattice..")
+            .should().dependOnClassesThat()
+            .haveNameMatching(".*AKIA[0-9A-Z]{16}.*")
+        rule.allowEmptyShould(true)
+        rule.because(
+            "FARCH-018: no secret-shaped literals (AKIA[0-9A-Z]{16}, ghp_, base64 blobs) " +
+                "in production code outside foundation.secret; synthetic test markers are exempt"
+        ).check(imported)
+    }
+
     private fun rule(definition: ArchRule, because: String): ArchRule = definition.because(because)
 }

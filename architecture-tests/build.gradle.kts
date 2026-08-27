@@ -17,6 +17,7 @@ dependencies {
     testImplementation(projects.providerGradle)
     testImplementation(projects.graphProjection)
     testImplementation(projects.fleetDiff)
+    testImplementation(projects.releaseEngine)
     testImplementation(libs.archunit.junit5)
 }
 
@@ -199,4 +200,76 @@ val farch016DefensiveScan by tasks.registering {
 
 tasks.named("check") {
     dependsOn(farch016DefensiveScan)
+}
+
+/**
+ * FARCH-017 defensive scan: verify release-engine/build.gradle.kts does not contain
+ * forbidden dependency tokens (processbuilder, runtime.exec, exitprocess, getenv,
+ * snakeyaml, kaml, jackson, gson, jgit, serialization, etc.).
+ * This guards against reintroducing forbidden deps at the build level.
+ */
+val releaseEngineDefensiveScan by tasks.registering {
+    val buildFile = rootProject.file("release-engine/build.gradle.kts")
+    inputs.file(buildFile)
+    doLast {
+        val content = buildFile.readText()
+        val forbiddenTokens = listOf(
+            "processbuilder", "runtime.exec", "exitprocess", "getenv",
+            "snakeyaml", "kaml", "jackson", "gson", "jgit", "serialization",
+            "com.google.inject", "org.springframework",
+            "javax.inject", "jakarta.inject", "kotlin.reflect",
+        )
+        val foundTokens = forbiddenTokens.filter { content.lowercase().contains(it) }
+        check(foundTokens.isEmpty()) {
+            "FARCH-017 DEFENSIVE SCAN FAILED: release-engine/build.gradle.kts must not contain " +
+                "forbidden dependency tokens: ${foundTokens.joinToString()}. " +
+                "FARCH-017 requires :release-engine to be dependency-isolated."
+        }
+        println("FARCH-017 defensive scan PASSED: no forbidden tokens in release-engine/build.gradle.kts")
+    }
+}
+
+tasks.named("check") {
+    dependsOn(releaseEngineDefensiveScan)
+}
+
+/**
+ * FARCH-018 secret isolation scan: walk release-engine/src/main/kotlin/**/*.kt files
+ * and reject any string literal matching curated secret-shaped patterns.
+ */
+val releaseEngineSecretIsolationScan by tasks.registering {
+    val sourceDir = rootProject.file("release-engine/src/main/kotlin")
+    inputs.dir(sourceDir)
+    doLast {
+        val secretPatterns = listOf(
+            Regex("AKIA[0-9A-Z]{16}"),           // AWS access key
+            Regex("ghp_[A-Za-z0-9]{36}"),        // GitHub PAT
+            Regex("[A-Za-z0-9+/]{40,}="),         // base64 credential blob
+        )
+
+        val ktFiles = sourceDir.walkTopDown().filter { it.extension == "kt" }
+        var violations = 0
+        for (file in ktFiles) {
+            val lines = file.readLines()
+            for ((lineNo, line) in lines.withIndex()) {
+                // Skip synthetic test markers and example placeholders
+                if (line.contains("synthetic") || line.contains("secret://example")) continue
+                for (pattern in secretPatterns) {
+                    if (pattern.containsMatchIn(line)) {
+                        println("FARCH-018 VIOLATION in ${file.relativeTo(sourceDir)}:$lineNo: ${line.trim()}")
+                        violations++
+                    }
+                }
+            }
+        }
+        check(violations == 0) {
+            "FARCH-018 SECRET ISOLATION SCAN FAILED: found $violations secret-shaped literals in " +
+                "release-engine/src/main/kotlin/**/*.kt"
+        }
+        println("FARCH-018 secret isolation scan PASSED: no secret-shaped literals in production code")
+    }
+}
+
+tasks.named("check") {
+    dependsOn(releaseEngineSecretIsolationScan)
 }
