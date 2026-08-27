@@ -1,10 +1,21 @@
 package dev.rubentxu.pipelattice.fleet.diff.repository
 
+import dev.rubentxu.pipelattice.compose.CompositionEngine
+import dev.rubentxu.pipelattice.compose.domain.CompositionRequest
+import dev.rubentxu.pipelattice.compose.domain.CompositionResult
+import dev.rubentxu.pipelattice.compose.domain.ExplainResult
+import dev.rubentxu.pipelattice.compose.ports.CatalogSource
+import dev.rubentxu.pipelattice.compose.ports.ProvenanceSink
+import dev.rubentxu.pipelattice.compose.translate.CompositionToGraphTranslator
 import dev.rubentxu.pipelattice.fleet.diff.ports.GitRefResolution
 import dev.rubentxu.pipelattice.foundation.diagnostics.DiagnosticSeverity
+import dev.rubentxu.pipelattice.foundation.diagnostics.DiagnosticSink
+import dev.rubentxu.pipelattice.graph.domain.Edge
 import dev.rubentxu.pipelattice.graph.domain.GraphNode
 import dev.rubentxu.pipelattice.graph.domain.GraphSnapshot
 import dev.rubentxu.pipelattice.graph.domain.PlanFingerprint
+import dev.rubentxu.pipelattice.resource.PipelineDefinitionResource
+import dev.rubentxu.pipelattice.resource.PipelineProfileResource
 import dev.rubentxu.pipelattice.resource.ResourceParser
 import dev.rubentxu.pipelattice.resource.SourceDocument
 import java.nio.file.Path
@@ -13,18 +24,24 @@ import java.security.MessageDigest
 /**
  * Factory for creating content-derived [GraphSnapshot] from YAML sources at a git ref.
  *
- * ## Content emission (m15)
+ * ## Content emission (m15+v2)
  * Each [SourceDocument] is parsed via the [ResourceParser] port. If any parse error
  * occurs, the factory returns `null` and emits diagnostics to stderr.
  *
  * Each source file becomes one [GraphNode.ConfigSource] node. The node's `contentHash`
- * is the first 16 hex chars of SHA-256 of the raw YAML bytes. Edges are empty in v4
- * (edge emission deferred to a future cycle).
+ * is the first 16 hex chars of SHA-256 of the raw YAML bytes.
  *
- * ## Fingerprint scheme
- * `SHA-256("graph-content/v1:<refSha>:<inputHash>")` where `<inputHash>` =
+ * ## Edge emission (m16 v2)
+ * After parsing, the factory runs the composition engine over each [PipelineDefinitionResource]
+ * found in the sources, translates the results to edges via [CompositionToGraphTranslator],
+ * and populates the snapshot's [GraphSnapshot.edges] set. This is the primary mechanism
+ * for populating `effectiveChanges`, `providerChanges`, and `localOverrides` in the
+ * fleet diff report.
+ *
+ * ## Fingerprint scheme (m16 v2)
+ * `SHA-256("graph-content/v2:<refSha>:<inputHash>")` where `<inputHash>` =
  * SHA-256 of the sorted-by-path concatenated YAML content bytes. The domain tag
- * `graph-content/v1:` auto-invalidates m14 cache files at the application layer.
+ * `graph-content/v2:` auto-invalidates m15 v1 cache files at the application layer.
  *
  * ## Error handling
  * When any [ResourceParser.parse] returns [dev.rubentxu.pipelattice.resource.ParseResult.hasErrors],
@@ -42,21 +59,27 @@ public class GitSnapshotFactory {
      * @param resolution The resolved ref (valid 40-hex SHA).
      * @param sources The YAML source documents at the ref (sorted by path, from [GitTreeLoader]).
      * @param resourceParser The parser to use for each document (port, not concrete class).
+     * @param compositionEngine The composition engine for edge emission. Defaults to a
+     *        no-op engine that produces no edges. Production callers should pass a real
+     *        engine wrapped in [dev.rubentxu.pipelattice.compose.translate.GraphEmittingCompositionEngine].
      * @return A populated [GraphSnapshot], or `null` if any source fails to parse (with diagnostics on stderr).
      */
     public fun create(
         resolution: GitRefResolution.Resolved,
         sources: List<SourceDocument>,
         resourceParser: ResourceParser,
+        compositionEngine: CompositionEngine = NoOpCompositionEngine(),
     ): GraphSnapshot? {
         val allDiagnostics = mutableListOf<dev.rubentxu.pipelattice.foundation.diagnostics.Diagnostic>()
 
         // Parse all sources; collect errors
+        val parsedSources = mutableListOf<dev.rubentxu.pipelattice.resource.ParsedResource>()
         for (source in sources) {
             val result = resourceParser.parse(source)
             if (result.hasErrors) {
                 allDiagnostics.addAll(result.diagnostics.filter { it.severity == DiagnosticSeverity.ERROR })
             }
+            parsedSources.addAll(result.resources)
         }
 
         if (allDiagnostics.isNotEmpty()) {
@@ -75,14 +98,53 @@ public class GitSnapshotFactory {
             GraphNode.ConfigSource(Path.of(source.path), contentHash)
         }.toSet()
 
-        // Content-derived fingerprint: domain-tagged, includes input-hash
-        val fingerprintValue = sha256Hex("graph-content/v1:${resolution.sha}:$inputHash")
+        // Content-derived fingerprint: domain-tagged, includes input-hash (v2 scheme)
+        val fingerprintValue = sha256Hex("graph-content/v2:${resolution.sha}:$inputHash")
+
+        // Run composition pass to get edges
+        val edges = runCompositionPass(parsedSources, compositionEngine)
 
         return GraphSnapshot(
             nodes = nodes,
-            edges = emptySet(),
+            edges = edges,
             fingerprint = PlanFingerprint(fingerprintValue),
         )
+    }
+
+    /**
+     * Runs the composition pass over parsed resources to emit graph edges.
+     */
+    private fun runCompositionPass(
+        parsedSources: List<dev.rubentxu.pipelattice.resource.ParsedResource>,
+        compositionEngine: CompositionEngine,
+    ): Set<Edge> {
+        if (parsedSources.isEmpty()) return emptySet()
+
+        // Build catalog from profile resources
+        val profileRefs = parsedSources
+            .filterIsInstance<PipelineProfileResource>()
+            .associate {
+                dev.rubentxu.pipelattice.foundation.ResourceRef.parse("catalog://${it.metadata.name}") to
+                    SourceDocument("catalog://${it.metadata.name}", "")
+            }
+
+        val catalogSource = SimpleCatalogSource(profileRefs)
+
+        // Collect all edges from composition results
+        val allEdges = mutableSetOf<Edge>()
+        val translator = CompositionToGraphTranslator()
+
+        for (resource in parsedSources.filterIsInstance<PipelineDefinitionResource>()) {
+            val request = CompositionRequest(resource)
+            val emptySink = ProvenanceSink {
+                // No-op for edge collection
+            }
+            val result = compositionEngine.compose(request, catalogSource, emptySink)
+            val changeSet = translator.translate(result)
+            allEdges.addAll(changeSet.addedEdges)
+        }
+
+        return allEdges
     }
 
     private fun computeInputHash(sources: List<SourceDocument>): String {
@@ -95,5 +157,39 @@ public class GitSnapshotFactory {
         val digest = MessageDigest.getInstance("SHA-256")
         val hashBytes = digest.digest(input.toByteArray(Charsets.UTF_8))
         return hashBytes.joinToString("") { "%02x".format(it) }
+    }
+}
+
+/**
+ * No-op composition engine for cases where edge emission is not needed.
+ */
+private class NoOpCompositionEngine : CompositionEngine {
+    override fun compose(
+        request: CompositionRequest,
+        catalog: CatalogSource,
+        provenance: ProvenanceSink,
+    ): CompositionResult {
+        return CompositionResult(
+            pipelineId = request.definition.metadata.name,
+            parameters = emptyMap(),
+            provenance = emptyMap(),
+            fingerprint = "",
+            diagnostics = emptyList()
+        )
+    }
+
+    override fun explain(result: CompositionResult, path: String): ExplainResult {
+        return ExplainResult.Miss
+    }
+}
+
+/**
+ * Simple in-memory [CatalogSource] for resolving profile references within a single repository.
+ */
+private class SimpleCatalogSource(
+    private val documents: Map<dev.rubentxu.pipelattice.foundation.ResourceRef, SourceDocument>
+) : CatalogSource {
+    override fun resolve(ref: dev.rubentxu.pipelattice.foundation.ResourceRef, sink: DiagnosticSink): SourceDocument? {
+        return documents[ref]
     }
 }
