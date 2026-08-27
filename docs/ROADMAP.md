@@ -9,6 +9,10 @@ _None — next milestone (M8+ slices) will be defined when triggered by user req
 
 ## Recently Closed Milestones
 
+- **m13-inc011-exit-table** (v0.8.2, 2026-08-27, 5ee6cb3) — Refactor stacked catch handlers in fleet-diff CLI run() to table-driven ExitResult mapping. Behavior byte-identical (catch restored to Exception, Error subclasses propagate). Post-verify R1 amend+force-push pattern documented. 1 commit, 327/16 tests green, slow tier deferred.
+  New in m13: `ExitResult` data class + `mapExceptionToExit()` private helper replaces 3 stacked catch blocks; single `catch (e: Exception)` delegates to table-driven when-expression; INC-011 closed.
+  Cycle artifacts in `~/.local/share/sddk/projects/p-4c8272c9e7dcdfa2/cycle-artifacts/p-4c8272c9e7dcdfa2/m13-inc011-exit-table/`.
+
 - **m12-farch016-v2-cleanup** (v0.8.1, 2026-08-27, d4ff8f8) — FARCH-016 v2 byte-code System.exit guard with sanctioned entries; Sc15 stderr capture; slow-tier gate rewire; R1 closure (synthesized-violator RED regression test); latent SimpleConditionEvent violation-flag bug fix. 4 commits, 360/16 tests green, slow tier deferred to CI.
   New in m12: `NoSystemExitCallCondition` custom ArchCondition (byte-code scan for `System.exit` calls outside `Main` + `MainKt` FQNs) + `Farch016RedRegressionTest` behavioral test + `SyntheticSystemExitViolator` fixture; `CliGitIntegrationTest` class-level `@EnabledIf("gitAvailableOnPath")` replacing fragile PATH regex; `System.err` capture/restore in Sc15.
   Closes INC-008..011 (deferred target M13 for INC-011 Main.run stacked catches).
