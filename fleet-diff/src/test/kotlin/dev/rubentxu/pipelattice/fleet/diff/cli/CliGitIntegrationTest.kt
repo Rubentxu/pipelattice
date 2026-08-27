@@ -37,6 +37,12 @@ class CliGitIntegrationTest {
             .call()
 
         Git.open(gitDir.toFile()).use { git ->
+            // Configure git user (required for commits in JGit)
+            val config = git.repository.config
+            config.setString("user", null, "email", "test@example.com")
+            config.setString("user", null, "name", "Test User")
+            config.save()
+
             // Create a dummy file so there's something to commit
             gitDir.resolve("dummy.txt").toFile().createNewFile()
             git.add()
