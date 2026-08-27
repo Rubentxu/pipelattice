@@ -5,6 +5,8 @@ import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable
 import org.junit.jupiter.api.io.TempDir
+import java.io.ByteArrayOutputStream
+import java.io.PrintStream
 import java.nio.file.Path
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -83,8 +85,18 @@ class CliGitIntegrationTest {
 
     @Test
     fun `--repo repo-dir --base nonexistent-branch --candidate HEAD exits 2 with ref in stderr`() {
-        val code = Main.run(arrayOf("--repo", gitDir.toString(), "--base", "nonexistent-branch", "--candidate", "HEAD"))
-        assertEquals(Main.EXIT_VALIDATION, code)
+        // Sc15 test hardening: capture stderr to verify the ref name appears in the error message
+        val originalErr = System.err
+        val capturedErr = ByteArrayOutputStream()
+        try {
+            System.setErr(PrintStream(capturedErr))
+            val code = Main.run(arrayOf("--repo", gitDir.toString(), "--base", "nonexistent-branch", "--candidate", "HEAD"))
+            assertEquals(Main.EXIT_VALIDATION, code)
+            assertTrue(capturedErr.toString().contains("nonexistent-branch"),
+                "Expected stderr to contain 'nonexistent-branch' but got: ${capturedErr}")
+        } finally {
+            System.setErr(originalErr)
+        }
     }
 
     @Test
