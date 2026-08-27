@@ -63,8 +63,8 @@ class NoSystemExitCallCondition private constructor(
                     append("may call System.exit; all other code must return instead. ")
                     append("See INC-010 and INC-008.")
                 }
-                // true = IS a violation
-                events.add(SimpleConditionEvent(owner, true, message))
+                // conditionSatisfied=false means this IS a violation
+                events.add(SimpleConditionEvent(owner, false, message))
             }
         }
     }
