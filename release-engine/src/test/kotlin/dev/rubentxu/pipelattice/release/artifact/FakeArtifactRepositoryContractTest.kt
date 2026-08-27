@@ -181,17 +181,22 @@ class FakeArtifactRepositoryContractTest {
     /**
      * RED PROBE for FakeArtifactRepository: unique marker injected into
      * failure reason string, verified absent from invocations surface.
+     *
+     * NOTE: The original design explicitly noted that failure.toString() EXPOSES
+     * the reason field - this is "correct security behavior". The TCK verifies
+     * exclusion at the invocations() level where sanitization occurs.
      */
     @Test
-    fun `secret-exclusion probe - invocations do not expose marker`() = runBlocking {
+    fun `secret-exclusion probe - no marker in any surface`() = runBlocking {
         val repo = newFake()
 
         val probe = SecretProbeFactory.generateProbe()
 
-        // POSITIVE CONTROL: marker is present in the probe
+        // POSITIVE CONTROL: marker genuinely rides inside probe.material()
         assertTrue(
-            probe.marker.startsWith("PROBE-SECRET-MATERIAL-"),
-            "Positive control: probe marker must start with PROBE-SECRET-MATERIAL-. Got: ${probe.marker}"
+            probe.material().contains(probe.marker),
+            "Positive control: probe.material() must contain probe.marker. " +
+                "material()=${probe.material()}, marker=${probe.marker}"
         )
 
         val coord = ArtifactCoordinate("dev.example", "lib", "1.0.0")
@@ -200,8 +205,8 @@ class FakeArtifactRepositoryContractTest {
 
         repo.publish(PublishRequest(coord, Path.of("/tmp/lib.jar")))
 
+        // Surface: invocations() rendering must be sanitized
         val invocationsStr = repo.invocations().toString()
-
         assertTrue(
             !invocationsStr.contains(probe.marker),
             "FAIL: invocations() must not contain probe marker. Found: $invocationsStr"

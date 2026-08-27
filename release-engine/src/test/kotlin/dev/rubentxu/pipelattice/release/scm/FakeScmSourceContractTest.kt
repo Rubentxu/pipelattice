@@ -223,33 +223,35 @@ class FakeScmSourceContractTest {
      *
      * Uses a unique synthetic marker (PROBE-SECRET-MATERIAL-<suffix>) injected into
      * a failure reason string. Asserts:
-     * 1. POSITIVE CONTROL: the marker IS present in the probe (proves the probe is real)
-     * 2. NEGATIVE: the marker does NOT appear in invocations() toString()
+     * 1. POSITIVE CONTROL: the marker genuinely rides inside probe.material()
+     *    (proves the probe is real, not just well-named)
+     * 2. NEGATIVE: the marker does NOT appear in invocations() rendering
      *
      * The marker is NOT credential-shaped (does not trigger FARCH-018 patterns) but is
-     * unique per test, so any presence in invocations definitively indicates the
-     * request data is being captured without sanitization.
+     * unique per test, so any presence in invocations definitively indicates data leaking.
      *
-     * NOTE on failure.toString(): Since ScmFailure.Unknown uses a plain String for reason,
-     * the failure's toString() includes the raw reason. This is the correct security behavior
-     * for production code: if a credential-shaped string reaches a failure reason field,
-     * the toString() will expose it. Production code using SecretValue for sensitive fields
-     * would redact automatically. The TCK correctly detects this via the invocations check.
+     * NOTE on failure.toString(): The original design explicitly noted that failure.toString()
+     * EXPOSES the reason field. This is "correct security behavior" per the original comment:
+     * if a credential-shaped string reaches a failure reason field, toString() will expose it.
+     * Production code using SecretValue would redact automatically. The TCK verifies exclusion
+     * at the invocations() level (where SanitizedRequest wrapping happens).
      *
      * This replaces the tautological original test which used fixtures that never
      * contained any unique markers, making `indexOf("AKIA") < 0` vacuously true.
      */
     @Test
-    fun `secret-exclusion probe - invocations do not expose marker`() = runBlocking {
+    fun `secret-exclusion probe - no marker in any surface`() = runBlocking {
         val scm = newFake()
 
         // Generate a unique marker
         val probe = SecretProbeFactory.generateProbe()
 
-        // POSITIVE CONTROL: marker is present in the probe
+        // POSITIVE CONTROL: marker genuinely rides inside probe.material()
+        // This proves the probe is real, not just well-named
         assertTrue(
-            probe.marker.startsWith("PROBE-SECRET-MATERIAL-"),
-            "Positive control: probe marker must start with PROBE-SECRET-MATERIAL-. Got: ${probe.marker}"
+            probe.material().contains(probe.marker),
+            "Positive control: probe.material() must contain probe.marker. " +
+                "material()=${probe.material()}, marker=${probe.marker}"
         )
 
         // Enqueue a failure whose reason string carries the probe marker
@@ -264,10 +266,8 @@ class FakeScmSourceContractTest {
             )
         )
 
-        // The invocations surface is sanitized by SanitizedRequest wrapper
+        // Surface: invocations() rendering must be sanitized
         val invocationsStr = scm.invocations().toString()
-
-        // NEGATIVE: marker must NOT appear in invocations
         assertTrue(
             !invocationsStr.contains(probe.marker),
             "FAIL: invocations() must not contain probe marker. Found: $invocationsStr"

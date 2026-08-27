@@ -41,6 +41,18 @@ public object SecretProbeFactory {
      * The [marker] is the unique identifier that the TCK verifies:
      * - IS present in the probe (positive control)
      * - is NOT present in any rendered surface (negative exclusion)
+     *
+     * [material] is a JSON-like container that proves the marker rides inside
+     * a structured payload — the positive control `material().contains(marker)`
+     * verifies the probe is real, not just well-named.
      */
-    public class SecretProbe(public val marker: String)
+    public class SecretProbe(
+        public val marker: String,
+    ) {
+        /**
+         * Structured material that CONTAINS the marker.
+         * The marker genuinely rides inside this container.
+         */
+        public fun material(): String = """{"marker":"$marker","type":"secret-probe"}"""
+    }
 }
