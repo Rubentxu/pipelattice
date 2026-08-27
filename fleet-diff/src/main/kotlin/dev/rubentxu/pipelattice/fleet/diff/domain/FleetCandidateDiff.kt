@@ -22,9 +22,7 @@ public class FleetCandidateDiff(
     private val snapshotRepo: SnapshotRepository,
     private val graphStore: GraphProjectionStore,
     private val policySource: PolicyViolationSource = PolicyViolationSource(snapshotRepo),
-    private val compileAffectedValidator: CompileAffectedValidator = CompileAffectedValidator(
-        dev.rubentxu.pipelattice.compose.DefaultCompositionEngine()
-    ),
+    private val compileAffectedValidator: CompileAffectedValidator = CompileAffectedValidator(),
 ) {
 
     /**

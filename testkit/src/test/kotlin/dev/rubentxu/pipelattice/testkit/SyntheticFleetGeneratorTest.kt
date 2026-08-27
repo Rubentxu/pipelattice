@@ -1,5 +1,6 @@
 package dev.rubentxu.pipelattice.testkit
 
+import org.junit.jupiter.api.Tag
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -85,6 +86,7 @@ class SyntheticFleetGeneratorTest {
  * These tests are excluded from the default `./gradlew test` run.
  * Run with `./gradlew :testkit:test -Pslow` to execute.
  */
+@Tag("slow")
 class SyntheticFleetGeneratorSlowTest {
 
     @Test

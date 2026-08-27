@@ -4,6 +4,5 @@ plugins {
 
 dependencies {
     api(projects.foundation)
-    api(projects.resourceModel)
     testImplementation(kotlin("test"))
 }

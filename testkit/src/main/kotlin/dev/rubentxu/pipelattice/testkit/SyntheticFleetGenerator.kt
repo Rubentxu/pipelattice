@@ -1,7 +1,5 @@
 package dev.rubentxu.pipelattice.testkit
 
-import dev.rubentxu.pipelattice.resource.SourceDocument
-
 /**
  * Generates a deterministic synthetic fleet of YAML source documents.
  *
@@ -91,3 +89,13 @@ public class SyntheticFleetGenerator(
         return documents
     }
 }
+
+/**
+ * A source document with a path and content.
+ * This is a local type in testkit to avoid architecture coupling with resource-model.
+ * The content is valid YAML that parses via YamlResourceParser.
+ */
+public data class SourceDocument(
+    public val path: String,
+    public val content: String,
+)
