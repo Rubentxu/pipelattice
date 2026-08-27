@@ -11,6 +11,7 @@ dependencies {
     api(projects.foundation)
     api(projects.graphProjection)
     api(projects.configCompiler)
+    api(projects.pipelineCompose)
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.jgit)
     testImplementation(projects.testkit)
