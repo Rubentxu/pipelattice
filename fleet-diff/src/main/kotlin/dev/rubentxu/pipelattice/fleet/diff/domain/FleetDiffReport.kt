@@ -17,6 +17,7 @@ import java.time.Instant
  * - resolvedPolicyViolations: violations that existed in baseline but are fixed in candidate
  * - providerChanges: effective changes filtered to GOVERNED_BY edges
  * - localOverrides: effective changes filtered to OVERRIDES edges
+ * - secondaryHeuristic: results from the removed-edge heuristic (secondary signal)
  */
 public data class FleetDiffReport(
     val affectedProjects: Set<GraphNode>,
@@ -26,8 +27,20 @@ public data class FleetDiffReport(
     val resolvedPolicyViolations: List<PolicyViolation>,
     val providerChanges: List<FleetDiffChange>,
     val localOverrides: List<FleetDiffChange>,
+    val secondaryHeuristic: SecondaryHeuristicReport? = null,
     val schema: String = "fleet-diff/v1",
     val generatedAt: Instant = Instant.now(),
+)
+
+/**
+ * Report of invalid plans detected via the removed-edge heuristic (secondary signal).
+ *
+ * The removed-edge heuristic detects invalid plans by finding projects that were targets
+ * of removed SELECTS/IMPORTS/REQUIRES edges or sources of removed OVERRIDES/PATCHES edges.
+ * This is a secondary signal - the primary signal is the compile-affected validation pass.
+ */
+public data class SecondaryHeuristicReport(
+    val invalidPlanIds: List<ResourceRef> = emptyList(),
 )
 
 /**
