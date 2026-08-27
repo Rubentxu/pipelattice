@@ -223,68 +223,14 @@ class ArchitectureFitnessTest {
         rule.because(
             "fleet-diff must execute git processes only via the ProcessRunner port " +
                 "consumed from :build-engine (FARCH-016); direct ProcessBuilder use would " +
-                "violate the abstraction proof (ADR-0026 docsync permanent reservation).",
+                "violate the abstraction proof (ADR-0026 docsync permanent reservation). " +
+                "NOTE (M14): The m12 byte-code v2 guard (NoSystemExitCallCondition) was retired " +
+                "in M14 after JGit migration because fleet-diff no longer spawns subprocesses. " +
+                "The only remaining System.exit call site in fleet-diff is Main.main (sanctioned). " +
+                "RESIDUAL GAP (R7): v1 forbids kotlin.system.. package imports (catching kotlin.system.exitProcess " +
+                "reintroducers) but does NOT catch direct java.lang.System.exit calls. " +
+                "Code review is the mitigation for this gap.",
         ).check(imported)
-    }
-
-    /**
-     * FARCH-016 v2 — byte-code level guard for System.exit calls.
-     *
-     * Kotlin's `kotlin.system.exitProcess(Int)` is compiled to `INVOKESTATIC java/lang/System.exit(I)V`
-     * at byte-code level. This rule detects that call regardless of source syntax.
-     *
-     * Two FQNs are explicitly sanctioned (CLI entry points where JVM termination is correct):
-     * - `dev.rubentxu.pipelattice.fleet.diff.cli.Main`
-     * - `dev.rubentxu.pipelattice.fleet.diff.cli.MainKt`
-     *
-     * Cross-ref: INC-010 (sanctioned System.exit entries) and INC-008 (CLI entry documentation).
-     * This rule is additive to FARCH-016 v1 (package-import level) — it does NOT weaken the v1 rule.
-     */
-    @ArchTest
-    fun `FARCH-016 v2 fleet-diff byte-code System exit guard`(imported: JavaClasses) {
-        val rule = classes()
-            .that().resideInAPackage("dev.rubentxu.pipelattice.fleet.diff..")
-            .should(NoSystemExitCallCondition.create())
-        rule.allowEmptyShould(true)
-        rule.because(
-            "fleet-diff production code must not call System.exit; only CLI entry points " +
-                "(Main.main and MainKt.main) may terminate the JVM. All other library code " +
-                "must return exit codes to the caller. Byte-code guard prevents kotlin.system.exitProcess " +
-                "rewriting to java.lang.System.exit. Cross-ref: INC-010, INC-008 (ADR-0026).",
-        ).check(imported)
-    }
-
-    /**
-     * RED regression test: verify NoSystemExitCallCondition can be instantiated and the
-     * sanctioned FQNs constant is correctly populated.
-     *
-     * The actual FARCH-016 v2 ArchTest above provides the primary enforcement by
-     * applying the condition to fleet-diff bytecode at import time. This test serves
-     * as a can-load sanity check that the condition and its sanctioned FQN set are valid.
-     *
-     * RED phase: This test fails if the condition cannot be instantiated or the sanctioned
-     * FQN set is empty or misconfigured.
-     * GREEN phase: The condition is properly configured with exactly two sanctioned FQNs.
-     */
-    @ArchTest
-    fun `FARCH-016 v2 RED regression condition sanity check`(imported: JavaClasses) {
-        // Verify the condition can be instantiated
-        val condition = NoSystemExitCallCondition.create()
-
-        // Verify the sanctioned FQNs are correctly populated
-        val sanctionedFqns = NoSystemExitCallCondition.SANCTIONED_FQNS
-        assert(sanctionedFqns.size == 2) {
-            "Expected exactly 2 sanctioned FQNs, got ${sanctionedFqns.size}"
-        }
-        assert("dev.rubentxu.pipelattice.fleet.diff.cli.Main" in sanctionedFqns) {
-            "Main not in sanctioned FQNs"
-        }
-        assert("dev.rubentxu.pipelattice.fleet.diff.cli.MainKt" in sanctionedFqns) {
-            "MainKt not in sanctioned FQNs"
-        }
-
-        // The actual rule enforcement happens in the FARCH-016 v2 ArchTest above
-        // which checks fleet-diff bytecode and fails when non-sanctioned classes call System.exit
     }
 
     private fun rule(definition: ArchRule, because: String): ArchRule = definition.because(because)
