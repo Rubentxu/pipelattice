@@ -1,8 +1,11 @@
 package dev.rubentxu.pipelattice.fleet.diff.repository
 
+import dev.rubentxu.pipelattice.compiler.parse.YamlResourceParser
+import dev.rubentxu.pipelattice.fleet.diff.cache.SnapshotDiskCache
 import dev.rubentxu.pipelattice.fleet.diff.domain.SnapshotRepository
 import dev.rubentxu.pipelattice.fleet.diff.ports.GitRefResolution
 import dev.rubentxu.pipelattice.graph.domain.GraphSnapshot
+import dev.rubentxu.pipelattice.resource.ResourceParser
 import org.eclipse.jgit.errors.AmbiguousObjectException
 import org.eclipse.jgit.errors.IncorrectObjectTypeException
 import org.eclipse.jgit.errors.MissingObjectException
@@ -14,8 +17,11 @@ import java.nio.file.Path
 /**
  * Git-backed [SnapshotRepository] implementation that resolves refs via JGit.
  *
- * **V1 plumbing-only per orchestrator Q1 ruling.** Full `GraphSnapshot` content emission
- * (compiler integration at a git ref) is deferred to M12+.
+ * ## Content emission (m15)
+ * This implementation loads YAML files from a git ref via JGit tree walk,
+ * parses them through the [ResourceParser] port (not the concrete [YamlResourceParser] class),
+ * and emits a real [GraphSnapshot] with content-derived fingerprint. Results are cached
+ * on disk keyed by `<ref-sha>:<input-hash>`.
  *
  * This implementation uses JGit's pure-JVM IO and MUST NOT use `ProcessBuilder`,
  * `Runtime.exec`, `java.lang.Process`, `kotlin.system.exitProcess`,
@@ -29,24 +35,34 @@ import java.nio.file.Path
  *   `IllegalArgumentException` → CLI exit 2).
  * - JGit throws `IOException` (not a git repo, corrupted store) → [GitRepositoryUnavailableException]
  *   (consumed by CLI generic `Exception` handler → CLI exit 10).
+ * - Parse error (any YAML fails) → `null` returned (CLI exit 2), diagnostics on stderr.
  *
  * @param workingDir The git working tree directory. Must be a valid git repository.
- * @param snapshotFactory Factory for creating [GraphSnapshot] placeholders. Defaults to [GitSnapshotFactory].
+ * @param resourceParser Parser for YAML source documents. Defaults to [YamlResourceParser] (production convenience;
+ *        tests inject [FakeResourceParser][dev.rubentxu.pipelattice.fleet.diff.repository.FakeResourceParser]).
+ * @param snapshotFactory Factory for creating [GraphSnapshot] from source documents.
+ *        Defaults to [GitSnapshotFactory].
+ * @param cache Disk cache for resolved snapshots. Defaults to `${XDG_CACHE_HOME:-~/.cache}/pipelattice/fleet-snapshots/<repo-id>/`.
  * @throws GitRepositoryUnavailableException when the working directory is not a git repository
  *         or the git object store is inaccessible.
  * @see GitSnapshotFactory
+ * @see GitTreeLoader
+ * @see SnapshotDiskCache
  */
 public class GitSnapshotRepository(
     private val workingDir: Path,
+    private val resourceParser: ResourceParser = YamlResourceParser(),
     private val snapshotFactory: GitSnapshotFactory = GitSnapshotFactory(),
+    private val cache: SnapshotDiskCache = SnapshotDiskCache.defaultFor(workingDir),
 ) : SnapshotRepository {
 
     /**
-     * Loads a [GraphSnapshot] by resolving the given git ref using JGit.
+     * Loads a [GraphSnapshot] by resolving the given git ref using JGit,
+     * parsing YAML sources, and caching the result.
      *
      * @param ref A git ref (branch, tag, SHA, HEAD, HEAD~N, etc.).
-     * @return A placeholder [GraphSnapshot] if the ref resolves successfully,
-     *         or `null` if the ref does not exist in the repository.
+     * @return A content-derived [GraphSnapshot] if the ref resolves and YAML parses successfully,
+     *         or `null` if the ref does not exist, is ambiguous, or any YAML fails to parse.
      * @throws GitRepositoryUnavailableException if the working directory is not a git repository
      *         or the git object store is inaccessible.
      */
@@ -90,8 +106,30 @@ public class GitSnapshotRepository(
 
                 val commit = revWalk.parseCommit(objectId)
                 val sha = commit.name
+
+                // Load YAML sources via JGit tree walk
+                val treeLoader = GitTreeLoader(repo)
+                val sources = treeLoader.loadSources(commit)
+
+                // Compute cache key
+                val cacheKey = cache.key(sha, sources)
+
+                // Cache lookup — short-circuit on hit
+                val cached = cache.get(cacheKey)
+                if (cached != null) {
+                    return cached
+                }
+
+                // Cache miss — create snapshot via factory
                 val resolution = GitRefResolution.Resolved(sha)
-                snapshotFactory.create(resolution)
+                val snapshot = snapshotFactory.create(resolution, sources, resourceParser)
+
+                // Persist on success (snapshot is null on parse error → no cache write)
+                if (snapshot != null) {
+                    cache.put(cacheKey, snapshot)
+                }
+
+                snapshot
             } catch (e: MissingObjectException) {
                 null
             } catch (e: IncorrectObjectTypeException) {
