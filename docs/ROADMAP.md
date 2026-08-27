@@ -9,6 +9,33 @@ _None — next milestone (M8+ slices) will be defined when triggered by user req
 
 ## Recently Closed Milestones
 
+- **m11-git-snapshot-repository** — Status: completed — Closed cycle
+  `p-4c8272c9e7dcdfa2/m11-git-snapshot-repository`, sequence=100..106,
+  ledger=106 events, runtime CLOSED on 2026-08-27. Path: **A-lite**
+  (coherence 97/100 · verify PASS_WITH_WARNINGS · debt PASS_WITH_WARNINGS
+  standard depth). Tag `v0.8.0-m11-git-snapshot-repository` peels to
+  `5ae22df` on main (4 commits over base `396ffae`, workspace 361/0/0 tests
+  +4 slow-tier skipped-by-design, FARCH-011..016 active — 016 NEW:
+  :fleet-diff process-isolation mirror of FARCH-014 with dual defense and
+  fire-tested defensive scan).
+  New capability per spec 09 §S-009/S-017 + spec 04 §7 + spec 17 §2:
+  - `GitSnapshotRepository` adapter (port `SnapshotRepository` impl) resolving
+    branch/tag/SHA refs through a git process port (`GitCommand` +
+    `GitRefResolution` + `DefaultProcessRunner` facade en :build-engine);
+    zero new external deps.
+  - PlanFingerprint domain-tag scheme frozen:
+    `sha256("git-ref-only/v1:" + resolvedSha)` — GraphSnapshot shape untouched.
+  - CLI real plumbing: `--baseline/--candidate/--repo(default .)` resolve
+    against live repo; unknown ref → exit 2 with failing ref in stderr;
+    m10 exit-code contract preserved byte-for-byte (CliMainExitCodesTest 6/6).
+  - Slow tier `@Tag("slow")` + @TempDir real-git seeding via slowTest task.
+  - Scope PLUMBING-ONLY: graph content population deferred M12+ (ruling Q1);
+    LOC ~800 vs 470 forecast (+70%, W1) explained by DUP-001/002 test
+    verbosity (~205 LOC); carry-ins INC-008..011 (incl. FARCH-016 v2 target:
+    add java.lang.System.exit to forbidden list — bytecode evasion of W2).
+  Cycle artifacts in
+  `~/.local/share/sddk/projects/p-4c8272c9e7dcdfa2/cycle-artifacts/p-4c8272c9e7dcdfa2/m11-git-snapshot-repository/`.
+
 - **m10-debt-cleanup** — Status: completed — Closed cycle
   `p-4c8272c9e7dcdfa2/m10-debt-cleanup`, sequence=96, ledger=97 events,
   runtime CLOSED on 2026-08-27. Path: **B-direct** (hotfix-style cleanup, 124
