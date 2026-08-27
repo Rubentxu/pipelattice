@@ -3,9 +3,10 @@ package dev.rubentxu.pipelattice.fleet.diff.cli
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
-import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable
+import org.junit.jupiter.api.condition.EnabledIf
 import org.junit.jupiter.api.io.TempDir
 import java.io.ByteArrayOutputStream
+import java.io.File
 import java.io.PrintStream
 import java.nio.file.Path
 import kotlin.test.assertEquals
@@ -19,8 +20,10 @@ import kotlin.test.assertTrue
  * (per `pipelattice.kotlin-jvm.gradle.kts` convention: `excludeTags("slow")`).
  * They run under `./gradlew :fleet-diff:slowTest`.
  *
- * **Requires `git` binary on `PATH`.** The `@EnabledIfEnvironmentVariable` annotation
+ * **Requires `git` binary on `PATH`.** The `@EnabledIf("gitAvailableOnPath")` annotation
  * skips the test class cleanly when git is absent (CI environments without git).
+ * The probe walks System.getenv("PATH") split by `:` and checks File(dir, "git").canExecute()
+ * for each directory, returning true on first hit, false otherwise.
  *
  * Production behavior when user runs `fleet-diff --repo .`:
  * - If `.` is a git repo → git resolves refs → exit 0 or 2 depending on ref validity
@@ -30,8 +33,18 @@ import kotlin.test.assertTrue
  * while test setup uses ProcessBuilder in test source set only (outside the FARCH-016 guard).
  */
 @Tag("slow")
-@EnabledIfEnvironmentVariable(named = "PATH", matches = ".*git.*")
+@EnabledIf("gitAvailableOnPath")
 class CliGitIntegrationTest {
+
+    companion object {
+        @JvmStatic
+        fun gitAvailableOnPath(): Boolean {
+            val pathEnv = System.getenv("PATH") ?: return false
+            return pathEnv.split(":").any { dir ->
+                File(dir, "git").canExecute()
+            }
+        }
+    }
 
     @TempDir
     lateinit var tempDir: Path
