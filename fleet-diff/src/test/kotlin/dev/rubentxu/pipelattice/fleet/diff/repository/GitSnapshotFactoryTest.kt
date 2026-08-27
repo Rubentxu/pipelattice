@@ -51,7 +51,7 @@ class GitSnapshotFactoryTest {
     }
 
     @Test
-    fun `fingerprint is 64 lowercase hex with graph-content prefix`() {
+    fun `fingerprint is 64 lowercase hex with graph-content v2 prefix`() {
         val sha = "a".repeat(40)
         val resolution = GitRefResolution.Resolved(sha)
 
@@ -61,12 +61,12 @@ class GitSnapshotFactoryTest {
         val value = snapshot.fingerprint.value
         assertEquals(64, value.length)
         assertTrue(value.matches(Regex("[0-9a-f]{64}")), "Expected 64 lowercase hex chars, got: $value")
-        // The fingerprint is SHA-256("graph-content/v1:<sha>:<inputHash>"), not the literal string.
+        // The fingerprint is SHA-256("graph-content/v2:<sha>:<inputHash>"), not the literal string.
         // The domain tag is encoded in the hash input, not the hash output.
         // Verify the scheme is correct by checking that the hash input would produce this output.
-        val expectedHashInput = "graph-content/v1:${sha}:${SnapshotDiskCache.computeInputHash(emptySources)}"
+        val expectedHashInput = "graph-content/v2:${sha}:${SnapshotDiskCache.computeInputHash(emptySources)}"
         val expectedHash = sha256Hex(expectedHashInput)
-        assertEquals(expectedHash, value, "Fingerprint must be SHA-256 of graph-content/v1: scheme string")
+        assertEquals(expectedHash, value, "Fingerprint must be SHA-256 of graph-content/v2: scheme string")
     }
 
     private fun sha256Hex(input: String): String {
