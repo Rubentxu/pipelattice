@@ -10,8 +10,8 @@ application {
 dependencies {
     api(projects.foundation)
     api(projects.graphProjection)
-    api(projects.buildEngine)
     implementation(libs.kotlinx.coroutines.core)
+    implementation(libs.jgit)
     testImplementation(projects.testkit)
     testImplementation(kotlin("test"))
 }
