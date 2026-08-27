@@ -9,6 +9,11 @@ _None — next milestone (M8+ slices) will be defined when triggered by user req
 
 ## Recently Closed Milestones
 
+- **m12-farch016-v2-cleanup** (v0.8.1, 2026-08-27, d4ff8f8) — FARCH-016 v2 byte-code System.exit guard with sanctioned entries; Sc15 stderr capture; slow-tier gate rewire; R1 closure (synthesized-violator RED regression test); latent SimpleConditionEvent violation-flag bug fix. 4 commits, 360/16 tests green, slow tier deferred to CI.
+  New in m12: `NoSystemExitCallCondition` custom ArchCondition (byte-code scan for `System.exit` calls outside `Main` + `MainKt` FQNs) + `Farch016RedRegressionTest` behavioral test + `SyntheticSystemExitViolator` fixture; `CliGitIntegrationTest` class-level `@EnabledIf("gitAvailableOnPath")` replacing fragile PATH regex; `System.err` capture/restore in Sc15.
+  Closes INC-008..011 (deferred target M13 for INC-011 Main.run stacked catches).
+  Cycle artifacts in `~/.local/share/sddk/projects/p-4c8272c9e7dcdfa2/cycle-artifacts/p-4c8272c9e7dcdfa2/m12-farch016-v2-cleanup/`.
+
 - **m11-git-snapshot-repository** — Status: completed — Closed cycle
   `p-4c8272c9e7dcdfa2/m11-git-snapshot-repository`, sequence=100..106,
   ledger=106 events, runtime CLOSED on 2026-08-27. Path: **A-lite**
