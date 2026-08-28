@@ -13,6 +13,7 @@ import dev.rubentxu.pipelattice.release.artifact.ResolveRequest
 import dev.rubentxu.pipelattice.release.artifact.ResolveResult
 import java.nio.file.Path
 import kotlinx.coroutines.runBlocking
+import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Assertions.fail
@@ -32,6 +33,10 @@ import org.junit.jupiter.api.Test
  * 4. empty-queue-raises — empty queue raises IllegalStateException
  * 5. side-effect-consistency — descriptor(id) matches expected side-effects
  * 6. secret-exclusion — no secret-shaped literals in surfaces
+ *
+ * ## Expectation Hooks (for property-based compliance)
+ * Real adapters override the `expected*` hooks to derive values from their
+ * real fixtures. Fake adapters use the default hardcoded derivations.
  */
 public abstract class ArtifactRepositoryContract {
 
@@ -52,18 +57,21 @@ public abstract class ArtifactRepositoryContract {
     /**
      * Setup method for scripted publish success. Default no-op for real adapters.
      * Fake implementations should override to enqueue the result.
+     * The request is provided so real adapters can create fixtures at request.localPath.
      */
-    protected open suspend fun setupPublishSuccess(result: PublishResult) {}
+    protected open suspend fun setupPublishSuccess(result: PublishResult, request: PublishRequest) {}
 
     /**
      * Setup method for scripted resolve success.
+     * The request is provided for completeness; resolve uses pre-existing fixtures.
      */
-    protected open suspend fun setupResolveSuccess(result: ResolveResult) {}
+    protected open suspend fun setupResolveSuccess(result: ResolveResult, request: ResolveRequest) {}
 
     /**
      * Setup method for scripted download success.
+     * The request is provided so real adapters can create fixtures at the source path.
      */
-    protected open suspend fun setupDownloadSuccess(result: DownloadResult) {}
+    protected open suspend fun setupDownloadSuccess(result: DownloadResult, request: DownloadRequest) {}
 
     /**
      * Setup method for scripted resolve failure.
@@ -81,15 +89,47 @@ public abstract class ArtifactRepositoryContract {
      */
     protected open fun invocations(): List<Any> = emptyList()
 
+    /**
+     * Expectation hook for publish success: derives the expected [PublishResult]
+     * from the coordinate and request. Real adapters override to return the digest
+     * their real fixture produces (which the publish step will copy to the repo).
+     * The default returns a fake-compatible hardcoded digest.
+     */
+    protected open fun expectedPublishResult(coordinate: ArtifactCoordinate, request: PublishRequest): PublishResult =
+        PublishResult(coordinate, "sha256:abc123def456")
+
+    /**
+     * Expectation hook for resolve success: derives the expected [ResolveResult]
+     * from the coordinate and request. Real adapters override to return the digest
+     * their real fixture produces. Default uses fake-compatible hardcoded values.
+     */
+    protected open fun expectedResolveResult(coordinate: ArtifactCoordinate, request: ResolveRequest): ResolveResult =
+        ResolveResult(coordinate, "sha256:abc123def456", 12345L)
+
+    /**
+     * Expectation hook for download success: derives the expected [DownloadResult]
+     * from the coordinate, destination, and request. Real adapters override to return
+     * the size their real fixture produces.
+     */
+    protected open fun expectedDownloadResult(coordinate: ArtifactCoordinate, destination: Path, request: DownloadRequest): DownloadResult =
+        DownloadResult(coordinate, destination, 12345L)
+
+    /**
+     * Returns whether this adapter implements queue-based scripting (empty-queue invariants apply).
+     * Default true for fake queue-based adapters. Real adapters override to false.
+     */
+    protected open fun supportsQueueBasedScripting(): Boolean = true
+
     // ----- Invariant 1: scripted-success -----
 
     @Test
     protected open fun invariant_publish_success() {
         runBlocking {
             val coord = ArtifactCoordinate("dev.example", "lib", "1.0.0")
-            val expected = PublishResult(coord, "sha256:abc123def456")
-            setupPublishSuccess(expected)
-            val outcome = subject().publish(PublishRequest(coord, Path.of("/tmp/lib.jar")))
+            val request = PublishRequest(coord, Path.of("/tmp/lib.jar"))
+            val expected = expectedPublishResult(coord, request)
+            setupPublishSuccess(expected, request)
+            val outcome = subject().publish(request)
             assertTrue(outcome is Outcome.Success, "publish should succeed")
             assertEquals(expected, (outcome as Outcome.Success).value, "publish should return expected result")
         }
@@ -99,9 +139,10 @@ public abstract class ArtifactRepositoryContract {
     protected open fun invariant_resolve_success() {
         runBlocking {
             val coord = ArtifactCoordinate("dev.example", "lib", "1.0.0")
-            val expected = ResolveResult(coord, "sha256:abc123def456", 12345L)
-            setupResolveSuccess(expected)
-            val outcome = subject().resolve(ResolveRequest(coord))
+            val request = ResolveRequest(coord)
+            val expected = expectedResolveResult(coord, request)
+            setupResolveSuccess(expected, request)
+            val outcome = subject().resolve(request)
             assertTrue(outcome is Outcome.Success, "resolve should succeed")
             assertEquals(expected, (outcome as Outcome.Success).value, "resolve should return expected result")
         }
@@ -112,9 +153,10 @@ public abstract class ArtifactRepositoryContract {
         runBlocking {
             val coord = ArtifactCoordinate("dev.example", "lib", "1.0.0")
             val dest = Path.of("/tmp/downloaded.jar")
-            val expected = DownloadResult(coord, dest, 12345L)
-            setupDownloadSuccess(expected)
-            val outcome = subject().download(DownloadRequest(coord, dest))
+            val request = DownloadRequest(coord, dest)
+            val expected = expectedDownloadResult(coord, dest, request)
+            setupDownloadSuccess(expected, request)
+            val outcome = subject().download(request)
             assertTrue(outcome is Outcome.Success, "download should succeed")
             assertEquals(expected, (outcome as Outcome.Success).value, "download should return expected result")
         }
@@ -148,8 +190,9 @@ public abstract class ArtifactRepositoryContract {
     protected open fun invariant_invocations_stable() {
         runBlocking {
             val coord = ArtifactCoordinate("dev.example", "lib", "1.0.0")
-            setupResolveSuccess(ResolveResult(coord, "sha256:abc", 100L))
-            subject().resolve(ResolveRequest(coord))
+            val request = ResolveRequest(coord)
+            setupResolveSuccess(ResolveResult(coord, "sha256:abc", 100L), request)
+            subject().resolve(request)
             val snap1 = invocations()
             val snap2 = invocations()
             assertEquals(snap1, snap2, "invocations() should be stable")
@@ -161,6 +204,7 @@ public abstract class ArtifactRepositoryContract {
 
     @Test
     protected open fun invariant_publish_empty_raises() {
+        assumeTrue(supportsQueueBasedScripting(), "publish empty-raises only applies to queue-based adapters")
         runBlocking {
             try {
                 subject().publish(PublishRequest(ArtifactCoordinate("dev.example", "lib", "1.0.0"), Path.of("/tmp/lib.jar")))
@@ -173,6 +217,7 @@ public abstract class ArtifactRepositoryContract {
 
     @Test
     protected open fun invariant_resolve_empty_raises() {
+        assumeTrue(supportsQueueBasedScripting(), "resolve empty-raises only applies to queue-based adapters")
         runBlocking {
             try {
                 subject().resolve(ResolveRequest(ArtifactCoordinate("dev.example", "lib", "1.0.0")))
@@ -185,9 +230,10 @@ public abstract class ArtifactRepositoryContract {
 
     @Test
     protected open fun invariant_download_empty_raises() {
+        assumeTrue(supportsQueueBasedScripting(), "download empty-raises only applies to queue-based adapters")
         runBlocking {
             try {
-                subject().download(DownloadRequest(ArtifactCoordinate("dev.example", "lib", "1.0.0"), Path.of("/tmp/lib.jar")))
+                subject().download(DownloadRequest(ArtifactCoordinate("dev.example", "lib", "1.0.0"), Path.of("/tmp/downloaded.jar")))
                 fail("Expected IllegalStateException for download with empty queue")
             } catch (e: IllegalStateException) {
                 assertTrue(true, "download should raise IllegalStateException when queue is empty")

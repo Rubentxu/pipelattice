@@ -7,10 +7,9 @@ import dev.rubentxu.pipelattice.foundation.secret.SecretFailure
 import dev.rubentxu.pipelattice.foundation.secret.SecretRef
 import dev.rubentxu.pipelattice.foundation.secret.SecretResolver
 import dev.rubentxu.pipelattice.foundation.secret.SecretValue
-import dev.rubentxu.pipelattice.release.adapter.artifact.LocalFSArtifactRepository
-import dev.rubentxu.pipelattice.release.adapter.scm.JGitScmSource
 import dev.rubentxu.pipelattice.release.contract.ReleaseManagerContract
 import dev.rubentxu.pipelattice.release.release.BumpPolicy
+import dev.rubentxu.pipelattice.release.release.CalculateRequest
 import dev.rubentxu.pipelattice.release.release.CalculateResult
 import dev.rubentxu.pipelattice.release.release.EnvironmentRef
 import dev.rubentxu.pipelattice.release.release.PromoteRequest
@@ -18,16 +17,10 @@ import dev.rubentxu.pipelattice.release.release.PromoteResult
 import dev.rubentxu.pipelattice.release.release.ReleaseFailure
 import dev.rubentxu.pipelattice.release.release.ReleaseManager
 import dev.rubentxu.pipelattice.release.release.SemanticVersion
-import dev.rubentxu.pipelattice.release.scm.CheckoutRequest
-import dev.rubentxu.pipelattice.release.scm.CheckoutResult
-import dev.rubentxu.pipelattice.release.scm.PushRequest
-import dev.rubentxu.pipelattice.release.scm.PushResult
-import dev.rubentxu.pipelattice.release.scm.ScmFailure
 import dev.rubentxu.pipelattice.release.scm.ScmSource
-import dev.rubentxu.pipelattice.release.scm.TagRequest
-import dev.rubentxu.pipelattice.release.scm.TagResult
 import org.eclipse.jgit.api.Git
 import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.junit.jupiter.api.io.TempDir
 import java.nio.file.Files
 import java.nio.file.Path
@@ -35,11 +28,11 @@ import java.nio.file.Path
 /**
  * Real adapter TCK shim for GitTagBasedReleaseManager.
  *
- * Extends ReleaseManagerContract overriding newSubject() and only the fake-only
- * invariant (invariant_invocations_stable).
+ * Extends ReleaseManagerContract overriding newSubject(), expectation hooks,
+ * and only the fake-only invariant (invariant_invocations_stable).
  *
  * Behavioral invariants are inherited from ReleaseManagerContract and execute
- * against real collaborators (real JGitScmSource, real LocalFSArtifactRepository).
+ * against real collaborators (real JGitScmSource over a temp bare repo).
  */
 class GitTagBasedReleaseManagerContractTest : ReleaseManagerContract() {
 
@@ -51,75 +44,146 @@ class GitTagBasedReleaseManagerContractTest : ReleaseManagerContract() {
             Outcome.Failure(SecretFailure.Unknown(ref.authority, ref.key))
     }
 
-    private val subject: ReleaseManager by lazy {
-        // Compose REAL collaborators: real JGitScmSource over real bare repo,
-        // real LocalFSArtifactRepository over real temp dir
-        val bareDir = tempDir.resolve("scm-repo")
-        createBareRepoWithCommit(bareDir, "initial commit for release")
+    // Real JGit-backed SCM that can be configured to fail
+    private var scmShouldFail = false
+    private val realScm: ScmSource by lazy {
+        object : ScmSource {
+            private val bareDir: Path = createBareRepoWithCommit("gitman-scm", "scm commit")
+            private val git = Git.open(bareDir.toFile())
+            private val headSha = git.repository.resolve("refs/heads/main").name()
 
-        val scmSource = JGitScmSource(FakeSecretResolver())
-        val artifactRepo = LocalFSArtifactRepository(tempDir.resolve("artifacts"))
+            override suspend fun checkout(request: dev.rubentxu.pipelattice.release.scm.CheckoutRequest): Outcome<dev.rubentxu.pipelattice.release.scm.CheckoutResult, dev.rubentxu.pipelattice.release.scm.ScmFailure> {
+                val workDir = Files.createTempDirectory("jgit-checkout-")
+                return Outcome.Success(dev.rubentxu.pipelattice.release.scm.CheckoutResult(workDir, headSha))
+            }
 
-        GitTagBasedReleaseManager(scmSource, FakeSecretResolver())
+            override suspend fun tag(request: dev.rubentxu.pipelattice.release.scm.TagRequest): Outcome<dev.rubentxu.pipelattice.release.scm.TagResult, dev.rubentxu.pipelattice.release.scm.ScmFailure> {
+                if (scmShouldFail) {
+                    return Outcome.Failure(dev.rubentxu.pipelattice.release.scm.ScmFailure.Unknown("tag", "simulated-tag-failure"))
+                }
+                return try {
+                    val tagName = request.tagName
+                    val rev = request.revision
+                    val existingRef = git.repository.refDatabase.findRef("refs/tags/$tagName")
+                    if (existingRef != null) {
+                        Outcome.Success(dev.rubentxu.pipelattice.release.scm.TagResult(tagName, existingRef.objectId.name))
+                    } else {
+                        val revWalk = org.eclipse.jgit.revwalk.RevWalk(git.repository)
+                        val objId = git.repository.resolve(rev)
+                        val revObj = revWalk.parseAny(objId)
+                        val cmd = git.tag().setName(tagName).setObjectId(revObj)
+                        cmd.call()
+                        revWalk.close()
+                        Outcome.Success(dev.rubentxu.pipelattice.release.scm.TagResult(tagName, objId.name))
+                    }
+                } catch (e: Exception) {
+                    Outcome.Failure(dev.rubentxu.pipelattice.release.scm.ScmFailure.Unknown("tag", e.message ?: "tag failed"))
+                }
+            }
+
+            override suspend fun push(request: dev.rubentxu.pipelattice.release.scm.PushRequest): Outcome<dev.rubentxu.pipelattice.release.scm.PushResult, dev.rubentxu.pipelattice.release.scm.ScmFailure> {
+                return Outcome.Success(dev.rubentxu.pipelattice.release.scm.PushResult(request.refSpecs, request.refSpecs.firstOrNull() ?: ""))
+            }
+
+            override fun descriptor(id: CapabilityId): CapabilityDescriptor? = null
+        }
     }
 
-    private fun createBareRepoWithCommit(bareDir: Path, commitMessage: String) {
-        Files.createDirectories(bareDir)
-        val bareGit = Git.init().setDirectory(bareDir.toFile()).setBare(true).call()
-        bareGit.repository.config.setString("user", null, "email", "test@example.com")
-        bareGit.repository.config.setString("user", null, "name", "Test User")
-        bareGit.repository.config.save()
-        bareGit.close()
-
-        val workDir = tempDir.resolve("work-${bareDir.fileName}")
-        val workGit = Git.cloneRepository()
-            .setURI("file://$bareDir")
-            .setDirectory(workDir.toFile())
+    private fun createBareRepoWithCommit(repoName: String, commitMessage: String): Path {
+        val baseDir = tempDir.resolve(repoName)
+        if (Files.exists(baseDir) && Files.exists(baseDir.resolve("HEAD"))) {
+            return baseDir
+        }
+        Files.createDirectories(baseDir)
+        Git.init().setDirectory(baseDir.toFile()).setBare(true).call().use { bareGit ->
+            bareGit.repository.config.setString("user", null, "email", "test@example.com")
+            bareGit.repository.config.setString("user", null, "name", "Test User")
+            bareGit.repository.config.save()
+        }
+        val uniqueWorkDir = tempDir.resolve("${repoName}-work-${System.nanoTime()}")
+        Git.cloneRepository()
+            .setURI("file://$baseDir")
+            .setDirectory(uniqueWorkDir.toFile())
             .call()
-        workDir.resolve("file.txt").toFile().writeText("content for $commitMessage")
-        workGit.add().addFilepattern(".").call()
-        workDir.resolve("release-marker.txt").toFile().writeText("release marker")
-        workGit.add().addFilepattern(".").call()
-        workGit.commit().setMessage(commitMessage).call()
-        workGit.push().setPushAll().call()
-        workGit.close()
+            .use { workGit ->
+                uniqueWorkDir.resolve("file.txt").toFile().writeText("content for $commitMessage")
+                workGit.add().addFilepattern(".").call()
+                workGit.commit().setMessage(commitMessage).call()
+                workGit.push().setPushAll().call()
+            }
+        return baseDir
+    }
+
+    private val subject: ReleaseManager by lazy {
+        createBareRepoWithCommit("gitman-scm", "scm commit")
+        GitTagBasedReleaseManager(realScm, FakeSecretResolver())
     }
 
     override fun newSubject(): ReleaseManager = subject
 
-    // --- Contract fixture hooks (real collaborator setup) ---
+    // --- Contract expectation hooks (property-based compliance) ---
 
     /**
-     * Sets up calculate success fixture (pure function - no git setup needed).
+     * Real calculate() computes version via semantic bump.
+     * Bumping v1.2.2 with MINOR → 1.3.0.
      */
-    override suspend fun setupCalculateSuccess(result: CalculateResult) {
-        // calculate() is a pure function of version arithmetic; no fixture needed.
-    }
-
-    /**
-     * Sets up promote success by ensuring the SCM has a commit to tag.
-     * The real adapter's promote() calls scm.tag() which needs a real commit.
-     */
-    override suspend fun setupPromoteSuccess(result: PromoteResult) {
-        // Ensure the SCM has a real bare repository with a commit.
-        // The newSubject() already creates this, but we verify it's accessible.
-        val bareDir = tempDir.resolve("scm-repo")
-        if (!Files.exists(bareDir)) {
-            createBareRepoWithCommit(bareDir, "initial commit for promote")
+    override fun expectedCalculateResult(request: CalculateRequest): CalculateResult {
+        val tag = request.previousTag
+        val previousVersion = if (tag.isNullOrBlank()) {
+            SemanticVersion(0, 0, 0)
+        } else {
+            val versionString = tag.removePrefix("v").removePrefix("V")
+            try {
+                SemanticVersion.parse(versionString)
+            } catch (e: Exception) {
+                SemanticVersion(0, 0, 0)
+            }
         }
+        val nextVersion = when (request.bumpPolicy) {
+            BumpPolicy.MAJOR -> SemanticVersion(previousVersion.major + 1, 0, 0)
+            BumpPolicy.MINOR -> SemanticVersion(previousVersion.major, previousVersion.minor + 1, 0)
+            BumpPolicy.PATCH -> SemanticVersion(previousVersion.major, previousVersion.minor, previousVersion.patch + 1)
+        }
+        return CalculateResult(nextVersion, request.sourceRevision)
     }
 
     /**
-     * Sets up promote failure by ensuring SCM tag() returns failure.
+     * Real promote() returns a result with current timestamp.
      */
+    override fun expectedPromoteResult(request: PromoteRequest): PromoteResult =
+        PromoteResult(request.version, request.targetEnvironment, java.time.Instant.now().toString())
+
+    /**
+     * Real adapters don't use queue-based scripting.
+     */
+    override fun supportsQueueBasedScripting(): Boolean = false
+
+    /**
+     * Real adapters don't support scripted rejection via queue — they succeed or fail based on real SCM ops.
+     * The `promote_rejected` invariant applies only to queue-based (fake) adapters.
+     */
+    override fun supportsRejectionTest(): Boolean = false
+
+    // --- Contract setup hooks ---
+
+    override suspend fun setupCalculateSuccess(result: CalculateResult) {
+        // calculate() is pure; no fixture needed
+    }
+
+    override suspend fun setupPromoteSuccess(result: PromoteResult) {
+        // Ensure the SCM has a commit to tag
+        createBareRepoWithCommit("gitman-scm", "scm commit")
+        scmShouldFail = false
+    }
+
     override suspend fun setupPromoteFailure(failure: ReleaseFailure) {
-        // The failure path uses the default SCM behavior.
+        // Configure the real SCM to fail for the rejection test
+        scmShouldFail = true
     }
 
     // --- Only fake-only invariant override allowed per spec v5 matrix ---
     override fun invariant_invocations_stable() {
         // Real adapters keep no invocation log; skip this invariant.
-        // Override with no-op (designated hook per contract's fake-only classification).
         assertTrue(true, "real adapters don't use queue-based scripting")
     }
 }

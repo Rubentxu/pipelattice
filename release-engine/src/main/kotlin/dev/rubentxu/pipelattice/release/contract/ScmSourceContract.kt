@@ -12,6 +12,7 @@ import dev.rubentxu.pipelattice.release.scm.TagRequest
 import dev.rubentxu.pipelattice.release.scm.TagResult
 import java.nio.file.Path
 import kotlinx.coroutines.runBlocking
+import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Assertions.fail
@@ -31,6 +32,10 @@ import org.junit.jupiter.api.Test
  * 4. empty-queue-raises — empty queue raises IllegalStateException
  * 5. side-effect-consistency — descriptor(id) matches expected side-effects
  * 6. secret-exclusion — no secret-shaped literals in surfaces
+ *
+ * ## Expectation Hooks (for property-based compliance)
+ * Real adapters override the `expected*` hooks to derive values from their
+ * real fixtures. Fake adapters use the default hardcoded derivations.
  *
  * ## Usage
  * ```kotlin
@@ -87,16 +92,54 @@ public abstract class ScmSourceContract {
      */
     protected open fun invocations(): List<Any> = emptyList()
 
+    /**
+     * Expectation hook for checkout success: derives the expected [CheckoutResult]
+     * from the revision hint. Real adapters override to return the value their
+     * real fixture produces. Default derivation uses the fake-compatible hardcoded value.
+     */
+    protected open fun expectedCheckoutResult(revisionHint: String): CheckoutResult =
+        CheckoutResult(Path.of("/repo/checkout"), "deadbeefcafebabe1234567890abcdef12345678")
+
+    /**
+     * Expectation hook for tag success: derives the expected [TagResult] from the
+     * revision. Real adapters override to return the value their real fixture produces.
+     * Default derivation uses the fake-compatible hardcoded value.
+     */
+    protected open fun expectedTagResult(tagName: String, revision: String): TagResult =
+        TagResult(tagName, "abc123def456")
+
+    /**
+     * Returns whether this adapter implements queue-based scripting (empty-queue invariants apply).
+     * Default true for fake queue-based adapters. Real adapters override to false.
+     */
+    protected open fun supportsQueueBasedScripting(): Boolean = true
+
     // ----- Invariant 1: scripted-success -----
+
+    /**
+     * Returns the repository reference used in checkout invariants.
+     * Default returns git://example/repo (for fake queue-based adapters).
+     * Real adapter shims override to return the actual bare repository path.
+     */
+    protected open fun checkoutRepositoryRef(): dev.rubentxu.pipelattice.release.scm.RepositoryRef =
+        dev.rubentxu.pipelattice.release.scm.RepositoryRef.parse("git://example/repo")
+
+    /**
+     * Returns the repository reference used in tag invariants.
+     * Default returns git://example/repo (for fake queue-based adapters).
+     * Real adapter shims override to return the actual bare repository path.
+     */
+    protected open fun tagRepositoryRef(): dev.rubentxu.pipelattice.release.scm.RepositoryRef =
+        dev.rubentxu.pipelattice.release.scm.RepositoryRef.parse("git://example/repo")
 
     @Test
     protected open fun invariant_checkout_success() {
         runBlocking {
-            val expected = CheckoutResult(Path.of("/repo/checkout"), "deadbeefcafebabe1234567890abcdef12345678")
+            val expected = expectedCheckoutResult("main")
             setupCheckoutSuccess(expected)
             val outcome = subject().checkout(
                 CheckoutRequest(
-                    repository = dev.rubentxu.pipelattice.release.scm.RepositoryRef.parse("git://example/repo"),
+                    repository = checkoutRepositoryRef(),
                     revisionHint = "main",
                 )
             )
@@ -108,11 +151,11 @@ public abstract class ScmSourceContract {
     @Test
     protected open fun invariant_tag_success() {
         runBlocking {
-            val expected = TagResult("v1.0.0", "abc123def456")
+            val expected = expectedTagResult("v1.0.0", "abc123def456")
             setupTagSuccess(expected)
             val outcome = subject().tag(
                 TagRequest(
-                    repository = dev.rubentxu.pipelattice.release.scm.RepositoryRef.parse("git://example/repo"),
+                    repository = tagRepositoryRef(),
                     revision = "abc123def456",
                     tagName = "v1.0.0",
                 )
@@ -129,7 +172,7 @@ public abstract class ScmSourceContract {
             setupPushSuccess(expected)
             val outcome = subject().push(
                 PushRequest(
-                    repository = dev.rubentxu.pipelattice.release.scm.RepositoryRef.parse("git://example/repo"),
+                    repository = checkoutRepositoryRef(),
                     remote = "origin",
                     refSpecs = listOf("refs/heads/main"),
                 )
@@ -147,7 +190,7 @@ public abstract class ScmSourceContract {
             setupCheckoutFailure(ScmFailure.Unknown("checkout", "synthetic-unknown-ref"))
             val outcome = subject().checkout(
                 CheckoutRequest(
-                    repository = dev.rubentxu.pipelattice.release.scm.RepositoryRef.parse("git://example/repo"),
+                    repository = checkoutRepositoryRef(),
                     revisionHint = "nonexistent",
                 )
             )
@@ -161,7 +204,7 @@ public abstract class ScmSourceContract {
             setupTagFailure(ScmFailure.Conflict("tag", "synthetic-tag-conflict"))
             val outcome = subject().tag(
                 TagRequest(
-                    repository = dev.rubentxu.pipelattice.release.scm.RepositoryRef.parse("git://example/repo"),
+                    repository = tagRepositoryRef(),
                     revision = "abc123",
                     tagName = "v1.0.0",
                 )
@@ -179,7 +222,7 @@ public abstract class ScmSourceContract {
             setupCheckoutSuccess(result)
             subject().checkout(
                 CheckoutRequest(
-                    repository = dev.rubentxu.pipelattice.release.scm.RepositoryRef.parse("git://example/repo"),
+                    repository = checkoutRepositoryRef(),
                     revisionHint = "main",
                 )
             )
@@ -194,11 +237,12 @@ public abstract class ScmSourceContract {
 
     @Test
     protected open fun invariant_checkout_empty_raises() {
+        assumeTrue(supportsQueueBasedScripting(), "checkout empty-raises only applies to queue-based adapters")
         runBlocking {
             try {
                 subject().checkout(
                     CheckoutRequest(
-                        repository = dev.rubentxu.pipelattice.release.scm.RepositoryRef.parse("git://example/repo"),
+                        repository = checkoutRepositoryRef(),
                         revisionHint = "main",
                     )
                 )
@@ -211,11 +255,12 @@ public abstract class ScmSourceContract {
 
     @Test
     protected open fun invariant_tag_empty_raises() {
+        assumeTrue(supportsQueueBasedScripting(), "tag empty-raises only applies to queue-based adapters")
         runBlocking {
             try {
                 subject().tag(
                     TagRequest(
-                        repository = dev.rubentxu.pipelattice.release.scm.RepositoryRef.parse("git://example/repo"),
+                        repository = tagRepositoryRef(),
                         revision = "abc123",
                         tagName = "v1.0.0",
                     )
@@ -229,11 +274,12 @@ public abstract class ScmSourceContract {
 
     @Test
     protected open fun invariant_push_empty_raises() {
+        assumeTrue(supportsQueueBasedScripting(), "push empty-raises only applies to queue-based adapters")
         runBlocking {
             try {
                 subject().push(
                     PushRequest(
-                        repository = dev.rubentxu.pipelattice.release.scm.RepositoryRef.parse("git://example/repo"),
+                        repository = checkoutRepositoryRef(),
                         remote = "origin",
                         refSpecs = listOf("refs/heads/main"),
                     )

@@ -97,10 +97,12 @@ public class LocalFSArtifactRepository(
 
         return if (Files.exists(artifactPath)) {
             val digest = computeSha256(artifactPath)
+            val size = Files.size(artifactPath)
             Outcome.Success(
                 ResolveResult(
                     coordinate = coord,
                     digest = "sha256:${digest}",
+                    sizeBytes = size,
                 )
             )
         } else {

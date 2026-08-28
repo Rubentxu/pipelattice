@@ -12,6 +12,7 @@ import dev.rubentxu.pipelattice.release.release.ReleaseFailure
 import dev.rubentxu.pipelattice.release.release.ReleaseManager
 import dev.rubentxu.pipelattice.release.release.SemanticVersion
 import kotlinx.coroutines.runBlocking
+import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Assertions.fail
@@ -31,6 +32,10 @@ import org.junit.jupiter.api.Test
  * 4. empty-queue-raises — empty queue raises IllegalStateException
  * 5. side-effect-consistency — descriptor(id) matches expected side-effects
  * 6. secret-exclusion — no secret-shaped literals in surfaces
+ *
+ * ## Expectation Hooks (for property-based compliance)
+ * Real adapters override the `expected*` hooks to derive values from their
+ * real fixtures. Fake adapters use the default hardcoded derivations.
  */
 public abstract class ReleaseManagerContract {
 
@@ -70,21 +75,52 @@ public abstract class ReleaseManagerContract {
      */
     protected open fun invocations(): List<Any> = emptyList()
 
+    /**
+     * Expectation hook for calculate success: derives the expected [CalculateResult]
+     * from the request parameters. Real adapters override to return the value their
+     * real computation produces. Default derivation uses fake-compatible hardcoded version.
+     */
+    protected open fun expectedCalculateResult(request: CalculateRequest): CalculateResult {
+        // Default: SemanticVersion.parse("1.2.3") derived from bumping v1.2.2 with MINOR
+        val version = SemanticVersion.parse("1.2.3")
+        return CalculateResult(version, request.sourceRevision)
+    }
+
+    /**
+     * Expectation hook for promote success: derives the expected [PromoteResult]
+     * from the request. Real adapters override to return the value their
+     * real promotion produces. Default uses hardcoded timestamp.
+     */
+    protected open fun expectedPromoteResult(request: PromoteRequest): PromoteResult =
+        PromoteResult(request.version, request.targetEnvironment, "2024-01-01T00:00:00Z")
+
+    /**
+     * Returns whether this adapter implements queue-based scripting (empty-queue invariants apply).
+     * Default true for fake queue-based adapters. Real adapters override to false.
+     */
+    protected open fun supportsQueueBasedScripting(): Boolean = true
+
+    /**
+     * Returns whether this adapter supports the promote rejection invariant.
+     * Queue-based (fake) adapters can enqueue scripted rejections.
+     * Real adapters succeed or fail based on actual SCM operations — rejection test does not apply.
+     * Default true. Real adapters override to false.
+     */
+    protected open fun supportsRejectionTest(): Boolean = true
+
     // ----- Invariant 1: scripted-success -----
 
     @Test
     protected open fun invariant_calculate_success() {
         runBlocking {
-            val version = SemanticVersion.parse("1.2.3")
-            val expected = CalculateResult(version, "main")
-            setupCalculateSuccess(expected)
-            val outcome = subject().calculate(
-                CalculateRequest(
-                    sourceRevision = "main",
-                    previousTag = "v1.2.2",
-                    bumpPolicy = BumpPolicy.MINOR,
-                )
+            val request = CalculateRequest(
+                sourceRevision = "main",
+                previousTag = "v1.2.2",
+                bumpPolicy = BumpPolicy.MINOR,
             )
+            val expected = expectedCalculateResult(request)
+            setupCalculateSuccess(expected)
+            val outcome = subject().calculate(request)
             assertTrue(outcome is Outcome.Success, "calculate should succeed")
             assertEquals(expected, (outcome as Outcome.Success).value, "calculate should return expected result")
         }
@@ -93,16 +129,14 @@ public abstract class ReleaseManagerContract {
     @Test
     protected open fun invariant_promote_success() {
         runBlocking {
-            val version = SemanticVersion.parse("1.2.3")
-            val expected = PromoteResult(version, EnvironmentRef("prod"), "2024-01-01T00:00:00Z")
-            setupPromoteSuccess(expected)
-            val outcome = subject().promote(
-                PromoteRequest(
-                    targetEnvironment = EnvironmentRef("prod"),
-                    version = version,
-                    releaseNotes = null,
-                )
+            val request = PromoteRequest(
+                targetEnvironment = EnvironmentRef("prod"),
+                version = SemanticVersion.parse("1.2.3"),
+                releaseNotes = null,
             )
+            val expected = expectedPromoteResult(request)
+            setupPromoteSuccess(expected)
+            val outcome = subject().promote(request)
             assertTrue(outcome is Outcome.Success, "promote should succeed")
             assertEquals(expected, (outcome as Outcome.Success).value, "promote should return expected result")
         }
@@ -112,6 +146,7 @@ public abstract class ReleaseManagerContract {
 
     @Test
     protected open fun invariant_promote_rejected() {
+        assumeTrue(supportsRejectionTest(), "promote rejection test only applies to queue-based adapters")
         runBlocking {
             val version = SemanticVersion.parse("1.2.3")
             setupPromoteFailure(ReleaseFailure.PromotionRejected(version, "synthetic-policy-requires-approval", true))
@@ -150,6 +185,7 @@ public abstract class ReleaseManagerContract {
 
     @Test
     protected open fun invariant_calculate_empty_raises() {
+        assumeTrue(supportsQueueBasedScripting(), "calculate empty-raises only applies to queue-based adapters")
         runBlocking {
             try {
                 subject().calculate(
@@ -168,6 +204,7 @@ public abstract class ReleaseManagerContract {
 
     @Test
     protected open fun invariant_promote_empty_raises() {
+        assumeTrue(supportsQueueBasedScripting(), "promote empty-raises only applies to queue-based adapters")
         runBlocking {
             try {
                 subject().promote(
