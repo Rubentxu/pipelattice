@@ -57,9 +57,9 @@ public class JGitScmSource(
     override suspend fun checkout(request: CheckoutRequest): Outcome<CheckoutResult, ScmFailure> {
         return try {
             val repoPath = resolveRepoPath(request.repository)
-            // Use Git.open() which handles bare repositories correctly
-            val git = Git.open(repoPath.toFile())
-            val repo = git.repository
+            val repo = FileRepositoryBuilder()
+                .setGitDir(repoPath.toFile())
+                .build()
 
             val objectId: ObjectId = try {
                 repo.resolve(request.revisionHint)
@@ -74,6 +74,7 @@ public class JGitScmSource(
             // For bare repositories, create a working directory as a temp directory
             // and checkout into it
             val workDir = Files.createTempDirectory("jgit-checkout-")
+            val git = Git(repo)
 
             try {
                 // Set up the working tree and checkout
@@ -112,7 +113,6 @@ public class JGitScmSource(
     override suspend fun tag(request: TagRequest): Outcome<TagResult, ScmFailure> {
         return try {
             val repoPath = resolveRepoPath(request.repository)
-            // Use Git.open() which handles bare repositories correctly
             val git = Git.open(repoPath.toFile())
             val repo = git.repository
 
