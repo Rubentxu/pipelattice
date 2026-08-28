@@ -26,7 +26,7 @@ plugins {
  * provides the composition root for the four adapters.
  */
 kotlin {
-    explicitApi = explicitApi
+    // explicitApi is inherited from pipelattice.kotlin-jvm convention plugin
 }
 
 dependencies {

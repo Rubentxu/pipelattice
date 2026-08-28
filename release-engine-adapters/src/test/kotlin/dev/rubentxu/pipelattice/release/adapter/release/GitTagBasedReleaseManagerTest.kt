@@ -228,4 +228,34 @@ class GitTagBasedReleaseManagerTest {
         assertTrue(promote != null, "should advertise RELEASE_PROMOTE_V1")
         assertTrue(unknown == null, "should not advertise unknown capability")
     }
+
+    // ----- S15: promote idempotency on same version -----
+
+    @Test
+    fun `S15 promote idempotent on same version - second call succeeds`() = runBlocking {
+        val manager = GitTagBasedReleaseManager(
+            FakeScmSource(Outcome.Success(TagResult("v1.0.0", "abc123"))),
+            FakeSecretResolver()
+        )
+
+        // First promote
+        val outcome1 = manager.promote(
+            PromoteRequest(
+                targetEnvironment = EnvironmentRef("prod"),
+                version = SemanticVersion(1, 0, 0),
+            )
+        )
+        assertIs<Outcome.Success<PromoteResult>>(outcome1)
+
+        // Second promote with same version - should succeed (idempotent)
+        val outcome2 = manager.promote(
+            PromoteRequest(
+                targetEnvironment = EnvironmentRef("prod"),
+                version = SemanticVersion(1, 0, 0),
+            )
+        )
+        // Idempotent: second call succeeds without Conflict failure
+        assertIs<Outcome.Success<PromoteResult>>(outcome2)
+        assertEquals(outcome1.value.version, outcome2.value.version)
+    }
 }

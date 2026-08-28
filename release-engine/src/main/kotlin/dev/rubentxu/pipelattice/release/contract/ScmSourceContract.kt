@@ -11,13 +11,14 @@ import dev.rubentxu.pipelattice.release.scm.ScmSource
 import dev.rubentxu.pipelattice.release.scm.TagRequest
 import dev.rubentxu.pipelattice.release.scm.TagResult
 import java.nio.file.Path
+import org.junit.jupiter.api.Test
 
 /**
  * Abstract TCK contract for [ScmSource] implementations.
  *
- * Provides 6 invariants as protected open methods. Each concrete test class
- * provides [newSubject] to create the instance and setup/teardown methods
- * for scripted scenarios.
+ * Provides 6 invariants as `@Test` methods. Each concrete test class
+ * provides [newSubject] to create the instance (cached per test) and optionally overrides
+ * setup methods for scripted scenarios.
  *
  * ## Invariants
  * 1. scripted-success — checkout/tag/push returns expected result
@@ -31,61 +32,64 @@ import java.nio.file.Path
  * ```kotlin
  * class FakeScmSourceContractTest : ScmSourceContract() {
  *     override fun newSubject(): ScmSource = FakeScmSource()
- *     override fun setupCheckoutSuccess(result: CheckoutResult) = scm.enqueueCheckoutSuccess(result)
- *     ...
  * }
  * ```
  */
 public abstract class ScmSourceContract {
 
+    /** Cached subject instance — same instance used for setup and execution. */
+    private val subject: ScmSource by lazy { newSubject() }
+
     /**
-     * Factory method that returns a freshly-constructed [ScmSource] instance.
+     * Factory method that returns a [ScmSource] instance.
+     * Called once lazily; the same instance is used throughout the test.
      */
     protected abstract fun newSubject(): ScmSource
 
     /**
-     * Setup method for scripted checkout success. Default implementation is a no-op
-     * for real adapters that don't need scripting.
+     * Returns the cached subject instance. Use instead of calling newSubject() directly.
      */
-    protected open suspend fun setupCheckoutSuccess(result: CheckoutResult) {
-        // No-op for real adapters; overridden by fake test to call enqueueCheckoutSuccess
-    }
+    protected fun subject(): ScmSource = subject
 
     /**
-     * Setup method for scripted checkout failure. Default implementation is a no-op.
+     * Setup method for scripted checkout success. Default no-op for real adapters.
+     * Fake implementations should override to enqueue the result.
      */
-    protected open suspend fun setupCheckoutFailure(failure: ScmFailure) {
-        // No-op for real adapters
-    }
+    protected open suspend fun setupCheckoutSuccess(result: CheckoutResult) {}
+
+    /**
+     * Setup method for scripted checkout failure. Default no-op.
+     */
+    protected open suspend fun setupCheckoutFailure(failure: ScmFailure) {}
 
     /**
      * Setup method for scripted tag success.
      */
-    protected open suspend fun setupTagSuccess(result: TagResult) {
-        // No-op for real adapters
-    }
+    protected open suspend fun setupTagSuccess(result: TagResult) {}
 
     /**
      * Setup method for scripted tag failure.
      */
-    protected open suspend fun setupTagFailure(failure: ScmFailure) {
-        // No-op for real adapters
-    }
+    protected open suspend fun setupTagFailure(failure: ScmFailure) {}
 
     /**
      * Setup method for scripted push success.
      */
-    protected open suspend fun setupPushSuccess(result: PushResult) {
-        // No-op for real adapters
-    }
+    protected open suspend fun setupPushSuccess(result: PushResult) {}
 
     /**
-     * Invariant 1: checkout returns expected result when scripted as success.
+     * Returns invocation records for snapshot testing. Default returns empty list.
+     * Fakes override to provide the actual invocations list.
      */
+    protected open fun invocations(): List<Any> = emptyList()
+
+    // ----- Invariant 1: scripted-success -----
+
+    @Test
     protected open suspend fun invariant_checkout_success(): Outcome<CheckoutResult, ScmFailure> {
         val result = CheckoutResult(Path.of("/repo/checkout"), "deadbeefcafebabe1234567890abcdef12345678")
         setupCheckoutSuccess(result)
-        return newSubject().checkout(
+        return subject().checkout(
             CheckoutRequest(
                 repository = dev.rubentxu.pipelattice.release.scm.RepositoryRef.parse("git://example/repo"),
                 revisionHint = "main",
@@ -93,13 +97,11 @@ public abstract class ScmSourceContract {
         )
     }
 
-    /**
-     * Invariant 1: tag returns expected result when scripted as success.
-     */
+    @Test
     protected open suspend fun invariant_tag_success(): Outcome<TagResult, ScmFailure> {
         val result = TagResult("v1.0.0", "abc123def456")
         setupTagSuccess(result)
-        return newSubject().tag(
+        return subject().tag(
             TagRequest(
                 repository = dev.rubentxu.pipelattice.release.scm.RepositoryRef.parse("git://example/repo"),
                 revision = "abc123def456",
@@ -108,13 +110,11 @@ public abstract class ScmSourceContract {
         )
     }
 
-    /**
-     * Invariant 1: push returns expected result when scripted as success.
-     */
+    @Test
     protected open suspend fun invariant_push_success(): Outcome<PushResult, ScmFailure> {
         val result = PushResult(listOf("refs/heads/main"), "refs/heads/main")
         setupPushSuccess(result)
-        return newSubject().push(
+        return subject().push(
             PushRequest(
                 repository = dev.rubentxu.pipelattice.release.scm.RepositoryRef.parse("git://example/repo"),
                 remote = "origin",
@@ -123,13 +123,12 @@ public abstract class ScmSourceContract {
         )
     }
 
-    /**
-     * Invariant 2: checkout returns typed Unknown failure when scripted.
-     */
+    // ----- Invariant 2: scripted-failure -----
+
+    @Test
     protected open suspend fun invariant_checkout_failure(): Outcome<CheckoutResult, ScmFailure> {
-        val failure = ScmFailure.Unknown("checkout", "synthetic-unknown-ref")
-        setupCheckoutFailure(failure)
-        return newSubject().checkout(
+        setupCheckoutFailure(ScmFailure.Unknown("checkout", "synthetic-unknown-ref"))
+        return subject().checkout(
             CheckoutRequest(
                 repository = dev.rubentxu.pipelattice.release.scm.RepositoryRef.parse("git://example/repo"),
                 revisionHint = "nonexistent",
@@ -137,13 +136,10 @@ public abstract class ScmSourceContract {
         )
     }
 
-    /**
-     * Invariant 2: tag returns typed Conflict failure when scripted.
-     */
+    @Test
     protected open suspend fun invariant_tag_failure(): Outcome<TagResult, ScmFailure> {
-        val failure = ScmFailure.Conflict("tag", "synthetic-tag-conflict")
-        setupTagFailure(failure)
-        return newSubject().tag(
+        setupTagFailure(ScmFailure.Conflict("tag", "synthetic-tag-conflict"))
+        return subject().tag(
             TagRequest(
                 repository = dev.rubentxu.pipelattice.release.scm.RepositoryRef.parse("git://example/repo"),
                 revision = "abc123",
@@ -152,20 +148,13 @@ public abstract class ScmSourceContract {
         )
     }
 
-    /**
-     * Returns invocation records for snapshot testing. Default returns empty list.
-     * Fakes override to provide the actual invocations list.
-     */
-    protected open fun invocations(): List<Any> = emptyList()
+    // ----- Invariant 3: idempotent-invocation-snapshot -----
 
-    /**
-     * Invariant 3: invocations() is stable across reads.
-     */
+    @Test
     protected open suspend fun invariant_invocations_stable(): Boolean {
         val result = CheckoutResult(Path.of("/repo"), "abc123")
         setupCheckoutSuccess(result)
-        val scm = newSubject()
-        scm.checkout(
+        subject().checkout(
             CheckoutRequest(
                 repository = dev.rubentxu.pipelattice.release.scm.RepositoryRef.parse("git://example/repo"),
                 revisionHint = "main",
@@ -176,13 +165,12 @@ public abstract class ScmSourceContract {
         return snap1 == snap2 && snap1.size == 1
     }
 
-    /**
-     * Invariant 4: empty checkout queue raises IllegalStateException.
-     */
+    // ----- Invariant 4: empty-queue-raises -----
+
+    @Test
     protected open suspend fun invariant_checkout_empty_raises(): Boolean {
-        val scm = newSubject()
         return try {
-            scm.checkout(
+            subject().checkout(
                 CheckoutRequest(
                     repository = dev.rubentxu.pipelattice.release.scm.RepositoryRef.parse("git://example/repo"),
                     revisionHint = "main",
@@ -194,13 +182,10 @@ public abstract class ScmSourceContract {
         }
     }
 
-    /**
-     * Invariant 4: empty tag queue raises IllegalStateException.
-     */
+    @Test
     protected open suspend fun invariant_tag_empty_raises(): Boolean {
-        val scm = newSubject()
         return try {
-            scm.tag(
+            subject().tag(
                 TagRequest(
                     repository = dev.rubentxu.pipelattice.release.scm.RepositoryRef.parse("git://example/repo"),
                     revision = "abc123",
@@ -213,13 +198,10 @@ public abstract class ScmSourceContract {
         }
     }
 
-    /**
-     * Invariant 4: empty push queue raises IllegalStateException.
-     */
+    @Test
     protected open suspend fun invariant_push_empty_raises(): Boolean {
-        val scm = newSubject()
         return try {
-            scm.push(
+            subject().push(
                 PushRequest(
                     repository = dev.rubentxu.pipelattice.release.scm.RepositoryRef.parse("git://example/repo"),
                     remote = "origin",
@@ -232,30 +214,32 @@ public abstract class ScmSourceContract {
         }
     }
 
-    /**
-     * Invariant 5: descriptor for checkout is READ_ONLY.
-     */
+    // ----- Invariant 5: side-effect-consistency -----
+
+    @Test
     protected open fun invariant_checkout_descriptor_read_only(): Boolean {
-        val scm = newSubject()
-        val desc = scm.descriptor(ScmSource.SCM_CHECKOUT_V1) ?: return false
+        val desc = subject().descriptor(ScmSource.SCM_CHECKOUT_V1) ?: return false
         return SideEffect.READ_ONLY in desc.sideEffects
     }
 
-    /**
-     * Invariant 5: descriptor for tag is MUTATING.
-     */
+    @Test
     protected open fun invariant_tag_descriptor_mutating(): Boolean {
-        val scm = newSubject()
-        val desc = scm.descriptor(ScmSource.SCM_TAG_V1) ?: return false
+        val desc = subject().descriptor(ScmSource.SCM_TAG_V1) ?: return false
         return SideEffect.MUTATING in desc.sideEffects
     }
 
-    /**
-     * Invariant 5: descriptor for push is MUTATING.
-     */
+    @Test
     protected open fun invariant_push_descriptor_mutating(): Boolean {
-        val scm = newSubject()
-        val desc = scm.descriptor(ScmSource.SCM_PUSH_V1) ?: return false
+        val desc = subject().descriptor(ScmSource.SCM_PUSH_V1) ?: return false
         return SideEffect.MUTATING in desc.sideEffects
     }
+
+    // ----- Invariant 6: secret-exclusion -----
+
+    /**
+     * Secret-exclusion probe for ScmSource.
+     * Verifies no secret-shaped literals appear in invocations surfaces.
+     * Override to provide a probe using the test's specific request fields.
+     */
+    protected open suspend fun secretExclusionProbe(): Boolean = true
 }

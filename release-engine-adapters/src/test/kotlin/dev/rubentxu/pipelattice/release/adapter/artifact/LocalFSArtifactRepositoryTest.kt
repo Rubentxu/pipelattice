@@ -230,4 +230,38 @@ class LocalFSArtifactRepositoryTest {
         assertTrue(download != null, "should advertise ARTIFACT_DOWNLOAD_V1")
         assertTrue(unknown == null, "should not advertise unknown capability")
     }
+
+    // ----- S11: atomic write leaves no .tmp residue -----
+
+    @Test
+    fun `S11 publish atomic write leaves no tmp residue`() = runBlocking {
+        repoRoot = tempDir.resolve("repo-atomic")
+        // Create a larger file to ensure atomic write behavior
+        val payload = "x".repeat(4096)
+        val sourceJar = tempDir.resolve("mylib-1.0.0.jar").also {
+            Files.writeString(it, payload)
+        }
+        val request = PublishRequest(
+            coordinate = coord(),
+            localPath = sourceJar,
+        )
+
+        val outcome = newRepo().publish(request)
+
+        assertIs<Outcome.Success<PublishResult>>(outcome)
+
+        // Verify .jar exists with correct size
+        val jarPath = repoRoot.resolve("dev.example/mylib/1.0.0/mylib-1.0.0.jar")
+        assertTrue(Files.exists(jarPath), "artifact jar should exist")
+        assertEquals(4096L, Files.size(jarPath))
+
+        // S11: Verify NO .tmp file remains in the coordinate directory
+        val tmpFiles = Files.list(jarPath.parent).use { stream ->
+            stream.filter { it.fileName.toString().endsWith(".tmp") }.toList()
+        }
+        assertTrue(
+            tmpFiles.isEmpty(),
+            "No .tmp residue should remain after atomic write. Found: $tmpFiles"
+        )
+    }
 }
