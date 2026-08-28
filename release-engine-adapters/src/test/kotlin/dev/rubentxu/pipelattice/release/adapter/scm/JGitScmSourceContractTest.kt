@@ -8,6 +8,7 @@ import dev.rubentxu.pipelattice.foundation.secret.SecretResolver
 import dev.rubentxu.pipelattice.foundation.secret.SecretValue
 import dev.rubentxu.pipelattice.release.contract.ScmSourceContract
 import dev.rubentxu.pipelattice.release.scm.CheckoutResult
+import dev.rubentxu.pipelattice.release.scm.PushFixture
 import dev.rubentxu.pipelattice.release.scm.PushResult
 import dev.rubentxu.pipelattice.release.scm.RepositoryRef
 import dev.rubentxu.pipelattice.release.scm.ScmSource
@@ -16,7 +17,6 @@ import org.eclipse.jgit.api.Git
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.io.TempDir
-import java.nio.file.Files
 import java.nio.file.Path
 
 /**
@@ -47,6 +47,7 @@ class JGitScmSourceContractTest : ScmSourceContract() {
     // --- Shared fixture state (recreated per-method since @TempDir is method-scoped) ---
     private var checkoutFixture: CheckoutFixture? = null
     private var tagFixture: TagFixture? = null
+    private var pushFixture: PushFixture? = null
 
     private data class CheckoutFixture(val bareDir: Path, val workDir: Path, val headSha: String)
     private data class TagFixture(val bareDir: Path, val headSha: String)
@@ -54,27 +55,7 @@ class JGitScmSourceContractTest : ScmSourceContract() {
     private fun ensureCheckoutFixture(): CheckoutFixture {
         // Always recreate: @TempDir is method-scoped, cached path would be stale
         checkoutFixture = null
-        val bareDir = tempDir.resolve("checkout-fixture")
-        Files.createDirectories(bareDir)
-        Git.init().setDirectory(bareDir.toFile()).setBare(true).call().use { bareGit ->
-            bareGit.repository.config.setString("user", null, "email", "test@example.com")
-            bareGit.repository.config.setString("user", null, "name", "Test User")
-            bareGit.repository.config.save()
-        }
-        val workDir = tempDir.resolve("work-checkout-${System.nanoTime()}")
-        Git.cloneRepository()
-            .setURI(bareDir.toUri().toString())
-            .setDirectory(workDir.toFile())
-            .call()
-            .use { workGit ->
-                workDir.resolve("file.txt").toFile().writeText("checkout content")
-                workGit.add().addFilepattern(".").call()
-                workGit.commit().setMessage("checkout commit").call()
-                workGit.push().setPushAll().call()
-            }
-        val git = Git.open(bareDir.toFile())
-        val sha = git.repository.resolve("refs/heads/main").name()
-        git.close()
+        val (bareDir, workDir, sha) = BareRepoFixtureHelper.createWithClone(tempDir, "checkout", "checkout commit")
         checkoutFixture = CheckoutFixture(bareDir, workDir, sha)
         return checkoutFixture!!
     }
@@ -82,29 +63,17 @@ class JGitScmSourceContractTest : ScmSourceContract() {
     private fun ensureTagFixture(): TagFixture {
         // Always recreate: @TempDir is method-scoped, cached path would be stale
         tagFixture = null
-        val bareDir = tempDir.resolve("tag-fixture")
-        Files.createDirectories(bareDir)
-        Git.init().setDirectory(bareDir.toFile()).setBare(true).call().use { bareGit ->
-            bareGit.repository.config.setString("user", null, "email", "test@example.com")
-            bareGit.repository.config.setString("user", null, "name", "Test User")
-            bareGit.repository.config.save()
-        }
-        val workDir = tempDir.resolve("work-tag-${System.nanoTime()}")
-        Git.cloneRepository()
-            .setURI(bareDir.toUri().toString())
-            .setDirectory(workDir.toFile())
-            .call()
-            .use { workGit ->
-                workDir.resolve("file.txt").toFile().writeText("tag content")
-                workGit.add().addFilepattern(".").call()
-                workGit.commit().setMessage("tag commit").call()
-                workGit.push().setPushAll().call()
-            }
-        val git = Git.open(bareDir.toFile())
-        val sha = git.repository.resolve("refs/heads/main").name()
-        git.close()
+        val (bareDir, workDir, sha) = BareRepoFixtureHelper.createWithClone(tempDir, "tag", "tag commit")
         tagFixture = TagFixture(bareDir, sha)
         return tagFixture!!
+    }
+
+    private fun ensurePushFixture(): PushFixture {
+        // Always recreate: @TempDir is method-scoped, cached path would be stale
+        pushFixture = null
+        val (bareDir, workDir, _) = BareRepoFixtureHelper.createWithClone(tempDir, "push", "push commit")
+        pushFixture = PushFixture(bareDir, workDir)
+        return pushFixture!!
     }
 
     // --- Contract expectation hooks (property-based compliance) ---
@@ -166,9 +135,39 @@ class JGitScmSourceContractTest : ScmSourceContract() {
     }
 
     /**
+     * Returns the repository reference for push tests — points to the working repository
+     * cloned from the bare fixture.
+     */
+    override fun pushRepositoryRef(): RepositoryRef {
+        val fix = pushFixture ?: ensurePushFixture()
+        return RepositoryRef.parse(fix.workDir.toUri().toString())
+    }
+
+    /**
+     * Returns the push fixture for arrival testing.
+     */
+    override fun pushFixture(): PushFixture {
+        return pushFixture ?: ensurePushFixture()
+    }
+
+    /**
      * Real adapters don't use queue-based scripting.
      */
     override fun supportsQueueBasedScripting(): Boolean = false
+
+    /**
+     * Asserts that pushed refs actually exist on the bare remote fixture.
+     * Opens the bare repo and resolves each pushed ref to verify arrival.
+     */
+    override fun assertPushArrival(pushedRefs: List<String>, result: PushResult) {
+        val fix = pushFixture ?: ensurePushFixture()
+        Git.open(fix.bareDir.toFile()).use { git ->
+            for (refSpec in pushedRefs) {
+                val resolved = git.repository.resolve(refSpec)
+                assertTrue(resolved != null, "pushed ref $refSpec should exist on bare remote")
+            }
+        }
+    }
 
     // --- Contract setup hooks ---
 

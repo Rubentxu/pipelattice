@@ -1,5 +1,18 @@
 package dev.rubentxu.pipelattice.release.scm
 
+import java.nio.file.Path
+
+/**
+ * Fixture for push arrival testing: a bare repository paired with a working clone.
+ *
+ * @property bareDir Path to the bare repository that receives pushes.
+ * @property workDir Path to the working clone that pushes to the bare repo.
+ */
+public data class PushFixture(
+    public val bareDir: Path,
+    public val workDir: Path,
+)
+
 /**
  * Request to push commits to a remote repository.
  *

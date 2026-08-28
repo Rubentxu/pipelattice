@@ -140,6 +140,23 @@ public abstract class ScmSourceContract {
         dev.rubentxu.pipelattice.release.scm.RepositoryRef.parse("git://example/repo")
 
     /**
+     * Returns the repository reference used in push invariants — the working repository
+     * to push from. Default returns git://example/repo (for fake queue-based adapters).
+     * Real adapter shims override to return the actual work directory.
+     */
+    protected open fun pushRepositoryRef(): dev.rubentxu.pipelattice.release.scm.RepositoryRef =
+        dev.rubentxu.pipelattice.release.scm.RepositoryRef.parse("git://example/repo")
+
+    /**
+     * Returns a push fixture for arrival testing. When non-null, the push source
+     * (work dir) is used as `pushRepositoryRef()` and the bare dir can be used
+     * by `assertPushArrival` to verify the ref arrived.
+     *
+     * Default returns null (no fixture — arrival assertion is skipped or no-ops).
+     */
+    protected open fun pushFixture(): dev.rubentxu.pipelattice.release.scm.PushFixture? = null
+
+    /**
      * Asserts that the checkout result matches expectations.
      * Default implementation compares the entire CheckoutResult (workDir + revision).
      * Real adapters override to compare only revision (workDir differs between fixture and actual).
@@ -183,6 +200,21 @@ public abstract class ScmSourceContract {
         }
     }
 
+    /**
+     * Expectation hook for push arrival: asserts that pushed refs actually exist
+     * on the remote repository under test.
+     *
+     * Default implementation performs echo-compatible assertion (no-op for fakes).
+     * Real adapter shims override to resolve the pushed ref on the bare remote
+     * fixture and compare against the push result.
+     *
+     * @param pushedRefs The list of ref specs that were pushed.
+     * @param result The [PushResult] returned by the push operation.
+     */
+    protected open fun assertPushArrival(pushedRefs: List<String>, result: PushResult) {
+        // Default: echo-compatible — fakes keep passing without fixture setup
+    }
+
     @Test
     protected open fun invariant_push_success() {
         runBlocking {
@@ -190,13 +222,16 @@ public abstract class ScmSourceContract {
             setupPushSuccess(expected)
             val outcome = subject().push(
                 PushRequest(
-                    repository = checkoutRepositoryRef(),
+                    repository = pushRepositoryRef(),
                     remote = "origin",
                     refSpecs = listOf("refs/heads/main"),
                 )
             )
             assertTrue(outcome is Outcome.Success, "push should succeed")
-            assertEquals(expected, (outcome as Outcome.Success).value, "push should return expected result")
+            val actual = (outcome as Outcome.Success).value
+            assertEquals(expected, actual, "push should return expected result")
+            // Hook: assert actual arrival on the remote fixture
+            assertPushArrival(expected.pushedRefs, actual)
         }
     }
 
