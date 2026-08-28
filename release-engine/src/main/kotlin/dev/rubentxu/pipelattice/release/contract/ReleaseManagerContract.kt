@@ -11,6 +11,10 @@ import dev.rubentxu.pipelattice.release.release.PromoteResult
 import dev.rubentxu.pipelattice.release.release.ReleaseFailure
 import dev.rubentxu.pipelattice.release.release.ReleaseManager
 import dev.rubentxu.pipelattice.release.release.SemanticVersion
+import kotlinx.coroutines.runBlocking
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.Assertions.fail
 import org.junit.jupiter.api.Test
 
 /**
@@ -69,71 +73,65 @@ public abstract class ReleaseManagerContract {
     // ----- Invariant 1: scripted-success -----
 
     @Test
-    protected open suspend fun invariant_calculate_success(): Outcome<CalculateResult, ReleaseFailure> {
-        val version = SemanticVersion.parse("1.2.3")
-        val result = CalculateResult(version, "main")
-        setupCalculateSuccess(result)
-        return subject().calculate(
-            CalculateRequest(
-                sourceRevision = "main",
-                previousTag = "v1.2.2",
-                bumpPolicy = BumpPolicy.MINOR,
+    protected open fun invariant_calculate_success() {
+        runBlocking {
+            val version = SemanticVersion.parse("1.2.3")
+            val expected = CalculateResult(version, "main")
+            setupCalculateSuccess(expected)
+            val outcome = subject().calculate(
+                CalculateRequest(
+                    sourceRevision = "main",
+                    previousTag = "v1.2.2",
+                    bumpPolicy = BumpPolicy.MINOR,
+                )
             )
-        )
+            assertTrue(outcome is Outcome.Success, "calculate should succeed")
+            assertEquals(expected, (outcome as Outcome.Success).value, "calculate should return expected result")
+        }
     }
 
     @Test
-    protected open suspend fun invariant_promote_success(): Outcome<PromoteResult, ReleaseFailure> {
-        val version = SemanticVersion.parse("1.2.3")
-        val result = PromoteResult(version, EnvironmentRef("prod"), "2024-01-01T00:00:00Z")
-        setupPromoteSuccess(result)
-        return subject().promote(
-            PromoteRequest(
-                targetEnvironment = EnvironmentRef("prod"),
-                version = version,
-                releaseNotes = null,
+    protected open fun invariant_promote_success() {
+        runBlocking {
+            val version = SemanticVersion.parse("1.2.3")
+            val expected = PromoteResult(version, EnvironmentRef("prod"), "2024-01-01T00:00:00Z")
+            setupPromoteSuccess(expected)
+            val outcome = subject().promote(
+                PromoteRequest(
+                    targetEnvironment = EnvironmentRef("prod"),
+                    version = version,
+                    releaseNotes = null,
+                )
             )
-        )
+            assertTrue(outcome is Outcome.Success, "promote should succeed")
+            assertEquals(expected, (outcome as Outcome.Success).value, "promote should return expected result")
+        }
     }
 
     // ----- Invariant 2: scripted-failure -----
 
     @Test
-    protected open suspend fun invariant_promote_rejected(): Outcome<PromoteResult, ReleaseFailure> {
-        val version = SemanticVersion.parse("1.2.3")
-        val failure = ReleaseFailure.PromotionRejected(version, "synthetic-policy-requires-approval", true)
-        setupPromoteFailure(failure)
-        return subject().promote(
-            PromoteRequest(
-                targetEnvironment = EnvironmentRef("prod"),
-                version = version,
+    protected open fun invariant_promote_rejected() {
+        runBlocking {
+            val version = SemanticVersion.parse("1.2.3")
+            setupPromoteFailure(ReleaseFailure.PromotionRejected(version, "synthetic-policy-requires-approval", true))
+            val outcome = subject().promote(
+                PromoteRequest(
+                    targetEnvironment = EnvironmentRef("prod"),
+                    version = version,
+                )
             )
-        )
+            assertTrue(outcome is Outcome.Failure, "promote should return failure for rejected promotion")
+        }
     }
 
     // ----- Invariant 3: idempotent-invocation-snapshot -----
 
     @Test
-    protected open suspend fun invariant_invocations_stable(): Boolean {
-        val version = SemanticVersion.parse("1.2.3")
-        setupCalculateSuccess(CalculateResult(version, "main"))
-        subject().calculate(
-            CalculateRequest(
-                sourceRevision = "main",
-                previousTag = "v1.2.2",
-                bumpPolicy = BumpPolicy.MINOR,
-            )
-        )
-        val snap1 = invocations()
-        val snap2 = invocations()
-        return snap1 == snap2 && snap1.size == 1
-    }
-
-    // ----- Invariant 4: empty-queue-raises -----
-
-    @Test
-    protected open suspend fun invariant_calculate_empty_raises(): Boolean {
-        return try {
+    protected open fun invariant_invocations_stable() {
+        runBlocking {
+            val version = SemanticVersion.parse("1.2.3")
+            setupCalculateSuccess(CalculateResult(version, "main"))
             subject().calculate(
                 CalculateRequest(
                     sourceRevision = "main",
@@ -141,42 +139,75 @@ public abstract class ReleaseManagerContract {
                     bumpPolicy = BumpPolicy.MINOR,
                 )
             )
-            false
-        } catch (e: IllegalStateException) {
-            true
+            val snap1 = invocations()
+            val snap2 = invocations()
+            assertEquals(snap1, snap2, "invocations() should be stable")
+            assertEquals(1, snap1.size, "invocations() should record exactly one call")
+        }
+    }
+
+    // ----- Invariant 4: empty-queue-raises -----
+
+    @Test
+    protected open fun invariant_calculate_empty_raises() {
+        runBlocking {
+            try {
+                subject().calculate(
+                    CalculateRequest(
+                        sourceRevision = "main",
+                        previousTag = "v1.2.2",
+                        bumpPolicy = BumpPolicy.MINOR,
+                    )
+                )
+                fail("Expected IllegalStateException for calculate with empty queue")
+            } catch (e: IllegalStateException) {
+                assertTrue(true, "calculate should raise IllegalStateException when queue is empty")
+            }
         }
     }
 
     @Test
-    protected open suspend fun invariant_promote_empty_raises(): Boolean {
-        return try {
-            subject().promote(
-                PromoteRequest(
-                    targetEnvironment = EnvironmentRef("prod"),
-                    version = SemanticVersion.parse("1.2.3"),
+    protected open fun invariant_promote_empty_raises() {
+        runBlocking {
+            try {
+                subject().promote(
+                    PromoteRequest(
+                        targetEnvironment = EnvironmentRef("prod"),
+                        version = SemanticVersion.parse("1.2.3"),
+                    )
                 )
-            )
-            false
-        } catch (e: IllegalStateException) {
-            true
+                fail("Expected IllegalStateException for promote with empty queue")
+            } catch (e: IllegalStateException) {
+                assertTrue(true, "promote should raise IllegalStateException when queue is empty")
+            }
         }
     }
 
     // ----- Invariant 5: side-effect-consistency -----
 
     @Test
-    protected open fun invariant_calculate_descriptor_read_only(): Boolean {
-        val desc = subject().descriptor(ReleaseManager.RELEASE_CALCULATE_V1) ?: return false
-        return SideEffect.READ_ONLY in desc.sideEffects
+    protected open fun invariant_calculate_descriptor_read_only() {
+        val desc = subject().descriptor(ReleaseManager.RELEASE_CALCULATE_V1)
+        assertTrue(desc != null, "descriptor should exist for RELEASE_CALCULATE_V1")
+        assertTrue(SideEffect.READ_ONLY in desc!!.sideEffects, "calculate should be READ_ONLY")
     }
 
     @Test
-    protected open fun invariant_promote_descriptor_mutating(): Boolean {
-        val desc = subject().descriptor(ReleaseManager.RELEASE_PROMOTE_V1) ?: return false
-        return SideEffect.MUTATING in desc.sideEffects
+    protected open fun invariant_promote_descriptor_mutating() {
+        val desc = subject().descriptor(ReleaseManager.RELEASE_PROMOTE_V1)
+        assertTrue(desc != null, "descriptor should exist for RELEASE_PROMOTE_V1")
+        assertTrue(SideEffect.MUTATING in desc!!.sideEffects, "promote should be MUTATING")
     }
 
     // ----- Invariant 6: secret-exclusion -----
+
+    @Test
+    protected open fun invariant_secret_exclusion() {
+        runBlocking {
+            val result = secretExclusionProbe()
+            assertTrue(result, "secret-exclusion probe should pass")
+        }
+    }
 
     /**
      * Secret-exclusion probe for ReleaseManager.

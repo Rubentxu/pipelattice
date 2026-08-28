@@ -11,6 +11,10 @@ import dev.rubentxu.pipelattice.release.scm.ScmSource
 import dev.rubentxu.pipelattice.release.scm.TagRequest
 import dev.rubentxu.pipelattice.release.scm.TagResult
 import java.nio.file.Path
+import kotlinx.coroutines.runBlocking
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.Assertions.fail
 import org.junit.jupiter.api.Test
 
 /**
@@ -86,155 +90,193 @@ public abstract class ScmSourceContract {
     // ----- Invariant 1: scripted-success -----
 
     @Test
-    protected open suspend fun invariant_checkout_success(): Outcome<CheckoutResult, ScmFailure> {
-        val result = CheckoutResult(Path.of("/repo/checkout"), "deadbeefcafebabe1234567890abcdef12345678")
-        setupCheckoutSuccess(result)
-        return subject().checkout(
-            CheckoutRequest(
-                repository = dev.rubentxu.pipelattice.release.scm.RepositoryRef.parse("git://example/repo"),
-                revisionHint = "main",
-            )
-        )
-    }
-
-    @Test
-    protected open suspend fun invariant_tag_success(): Outcome<TagResult, ScmFailure> {
-        val result = TagResult("v1.0.0", "abc123def456")
-        setupTagSuccess(result)
-        return subject().tag(
-            TagRequest(
-                repository = dev.rubentxu.pipelattice.release.scm.RepositoryRef.parse("git://example/repo"),
-                revision = "abc123def456",
-                tagName = "v1.0.0",
-            )
-        )
-    }
-
-    @Test
-    protected open suspend fun invariant_push_success(): Outcome<PushResult, ScmFailure> {
-        val result = PushResult(listOf("refs/heads/main"), "refs/heads/main")
-        setupPushSuccess(result)
-        return subject().push(
-            PushRequest(
-                repository = dev.rubentxu.pipelattice.release.scm.RepositoryRef.parse("git://example/repo"),
-                remote = "origin",
-                refSpecs = listOf("refs/heads/main"),
-            )
-        )
-    }
-
-    // ----- Invariant 2: scripted-failure -----
-
-    @Test
-    protected open suspend fun invariant_checkout_failure(): Outcome<CheckoutResult, ScmFailure> {
-        setupCheckoutFailure(ScmFailure.Unknown("checkout", "synthetic-unknown-ref"))
-        return subject().checkout(
-            CheckoutRequest(
-                repository = dev.rubentxu.pipelattice.release.scm.RepositoryRef.parse("git://example/repo"),
-                revisionHint = "nonexistent",
-            )
-        )
-    }
-
-    @Test
-    protected open suspend fun invariant_tag_failure(): Outcome<TagResult, ScmFailure> {
-        setupTagFailure(ScmFailure.Conflict("tag", "synthetic-tag-conflict"))
-        return subject().tag(
-            TagRequest(
-                repository = dev.rubentxu.pipelattice.release.scm.RepositoryRef.parse("git://example/repo"),
-                revision = "abc123",
-                tagName = "v1.0.0",
-            )
-        )
-    }
-
-    // ----- Invariant 3: idempotent-invocation-snapshot -----
-
-    @Test
-    protected open suspend fun invariant_invocations_stable(): Boolean {
-        val result = CheckoutResult(Path.of("/repo"), "abc123")
-        setupCheckoutSuccess(result)
-        subject().checkout(
-            CheckoutRequest(
-                repository = dev.rubentxu.pipelattice.release.scm.RepositoryRef.parse("git://example/repo"),
-                revisionHint = "main",
-            )
-        )
-        val snap1 = invocations()
-        val snap2 = invocations()
-        return snap1 == snap2 && snap1.size == 1
-    }
-
-    // ----- Invariant 4: empty-queue-raises -----
-
-    @Test
-    protected open suspend fun invariant_checkout_empty_raises(): Boolean {
-        return try {
-            subject().checkout(
+    protected open fun invariant_checkout_success() {
+        runBlocking {
+            val expected = CheckoutResult(Path.of("/repo/checkout"), "deadbeefcafebabe1234567890abcdef12345678")
+            setupCheckoutSuccess(expected)
+            val outcome = subject().checkout(
                 CheckoutRequest(
                     repository = dev.rubentxu.pipelattice.release.scm.RepositoryRef.parse("git://example/repo"),
                     revisionHint = "main",
                 )
             )
-            false
-        } catch (e: IllegalStateException) {
-            true
+            assertTrue(outcome is Outcome.Success, "checkout should succeed")
+            assertEquals(expected, (outcome as Outcome.Success).value, "checkout should return expected result")
         }
     }
 
     @Test
-    protected open suspend fun invariant_tag_empty_raises(): Boolean {
-        return try {
-            subject().tag(
+    protected open fun invariant_tag_success() {
+        runBlocking {
+            val expected = TagResult("v1.0.0", "abc123def456")
+            setupTagSuccess(expected)
+            val outcome = subject().tag(
                 TagRequest(
                     repository = dev.rubentxu.pipelattice.release.scm.RepositoryRef.parse("git://example/repo"),
-                    revision = "abc123",
+                    revision = "abc123def456",
                     tagName = "v1.0.0",
                 )
             )
-            false
-        } catch (e: IllegalStateException) {
-            true
+            assertTrue(outcome is Outcome.Success, "tag should succeed")
+            assertEquals(expected, (outcome as Outcome.Success).value, "tag should return expected result")
         }
     }
 
     @Test
-    protected open suspend fun invariant_push_empty_raises(): Boolean {
-        return try {
-            subject().push(
+    protected open fun invariant_push_success() {
+        runBlocking {
+            val expected = PushResult(listOf("refs/heads/main"), "refs/heads/main")
+            setupPushSuccess(expected)
+            val outcome = subject().push(
                 PushRequest(
                     repository = dev.rubentxu.pipelattice.release.scm.RepositoryRef.parse("git://example/repo"),
                     remote = "origin",
                     refSpecs = listOf("refs/heads/main"),
                 )
             )
-            false
-        } catch (e: IllegalStateException) {
-            true
+            assertTrue(outcome is Outcome.Success, "push should succeed")
+            assertEquals(expected, (outcome as Outcome.Success).value, "push should return expected result")
+        }
+    }
+
+    // ----- Invariant 2: scripted-failure -----
+
+    @Test
+    protected open fun invariant_checkout_failure() {
+        runBlocking {
+            setupCheckoutFailure(ScmFailure.Unknown("checkout", "synthetic-unknown-ref"))
+            val outcome = subject().checkout(
+                CheckoutRequest(
+                    repository = dev.rubentxu.pipelattice.release.scm.RepositoryRef.parse("git://example/repo"),
+                    revisionHint = "nonexistent",
+                )
+            )
+            assertTrue(outcome is Outcome.Failure, "checkout should return failure for nonexistent ref")
+        }
+    }
+
+    @Test
+    protected open fun invariant_tag_failure() {
+        runBlocking {
+            setupTagFailure(ScmFailure.Conflict("tag", "synthetic-tag-conflict"))
+            val outcome = subject().tag(
+                TagRequest(
+                    repository = dev.rubentxu.pipelattice.release.scm.RepositoryRef.parse("git://example/repo"),
+                    revision = "abc123",
+                    tagName = "v1.0.0",
+                )
+            )
+            assertTrue(outcome is Outcome.Failure, "tag should return failure for conflict")
+        }
+    }
+
+    // ----- Invariant 3: idempotent-invocation-snapshot -----
+
+    @Test
+    protected open fun invariant_invocations_stable() {
+        runBlocking {
+            val result = CheckoutResult(Path.of("/repo"), "abc123")
+            setupCheckoutSuccess(result)
+            subject().checkout(
+                CheckoutRequest(
+                    repository = dev.rubentxu.pipelattice.release.scm.RepositoryRef.parse("git://example/repo"),
+                    revisionHint = "main",
+                )
+            )
+            val snap1 = invocations()
+            val snap2 = invocations()
+            assertEquals(snap1, snap2, "invocations() should be stable")
+            assertEquals(1, snap1.size, "invocations() should record exactly one call")
+        }
+    }
+
+    // ----- Invariant 4: empty-queue-raises -----
+
+    @Test
+    protected open fun invariant_checkout_empty_raises() {
+        runBlocking {
+            try {
+                subject().checkout(
+                    CheckoutRequest(
+                        repository = dev.rubentxu.pipelattice.release.scm.RepositoryRef.parse("git://example/repo"),
+                        revisionHint = "main",
+                    )
+                )
+                fail("Expected IllegalStateException for checkout with empty queue")
+            } catch (e: IllegalStateException) {
+                assertTrue(true, "checkout should raise IllegalStateException when queue is empty")
+            }
+        }
+    }
+
+    @Test
+    protected open fun invariant_tag_empty_raises() {
+        runBlocking {
+            try {
+                subject().tag(
+                    TagRequest(
+                        repository = dev.rubentxu.pipelattice.release.scm.RepositoryRef.parse("git://example/repo"),
+                        revision = "abc123",
+                        tagName = "v1.0.0",
+                    )
+                )
+                fail("Expected IllegalStateException for tag with empty queue")
+            } catch (e: IllegalStateException) {
+                assertTrue(true, "tag should raise IllegalStateException when queue is empty")
+            }
+        }
+    }
+
+    @Test
+    protected open fun invariant_push_empty_raises() {
+        runBlocking {
+            try {
+                subject().push(
+                    PushRequest(
+                        repository = dev.rubentxu.pipelattice.release.scm.RepositoryRef.parse("git://example/repo"),
+                        remote = "origin",
+                        refSpecs = listOf("refs/heads/main"),
+                    )
+                )
+                fail("Expected IllegalStateException for push with empty queue")
+            } catch (e: IllegalStateException) {
+                assertTrue(true, "push should raise IllegalStateException when queue is empty")
+            }
         }
     }
 
     // ----- Invariant 5: side-effect-consistency -----
 
     @Test
-    protected open fun invariant_checkout_descriptor_read_only(): Boolean {
-        val desc = subject().descriptor(ScmSource.SCM_CHECKOUT_V1) ?: return false
-        return SideEffect.READ_ONLY in desc.sideEffects
+    protected open fun invariant_checkout_descriptor_read_only() {
+        val desc = subject().descriptor(ScmSource.SCM_CHECKOUT_V1)
+        assertTrue(desc != null, "descriptor should exist for SCM_CHECKOUT_V1")
+        assertTrue(SideEffect.READ_ONLY in desc!!.sideEffects, "checkout should be READ_ONLY")
     }
 
     @Test
-    protected open fun invariant_tag_descriptor_mutating(): Boolean {
-        val desc = subject().descriptor(ScmSource.SCM_TAG_V1) ?: return false
-        return SideEffect.MUTATING in desc.sideEffects
+    protected open fun invariant_tag_descriptor_mutating() {
+        val desc = subject().descriptor(ScmSource.SCM_TAG_V1)
+        assertTrue(desc != null, "descriptor should exist for SCM_TAG_V1")
+        assertTrue(SideEffect.MUTATING in desc!!.sideEffects, "tag should be MUTATING")
     }
 
     @Test
-    protected open fun invariant_push_descriptor_mutating(): Boolean {
-        val desc = subject().descriptor(ScmSource.SCM_PUSH_V1) ?: return false
-        return SideEffect.MUTATING in desc.sideEffects
+    protected open fun invariant_push_descriptor_mutating() {
+        val desc = subject().descriptor(ScmSource.SCM_PUSH_V1)
+        assertTrue(desc != null, "descriptor should exist for SCM_PUSH_V1")
+        assertTrue(SideEffect.MUTATING in desc!!.sideEffects, "push should be MUTATING")
     }
 
     // ----- Invariant 6: secret-exclusion -----
+
+    @Test
+    protected open fun invariant_secret_exclusion() {
+        runBlocking {
+            val result = secretExclusionProbe()
+            assertTrue(result, "secret-exclusion probe should pass")
+        }
+    }
 
     /**
      * Secret-exclusion probe for ScmSource.

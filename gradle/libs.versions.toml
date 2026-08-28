@@ -12,6 +12,7 @@ archunit-junit5 = { module = "com.tngtech.archunit:archunit-junit5", version.ref
 snakeyaml-engine = { module = "org.snakeyaml:snakeyaml-engine", version.ref = "snakeyaml-engine" }
 junit5-bom = { module = "org.junit:junit-bom", version.ref = "junit5" }
 junit5-jupiter = { module = "org.junit.jupiter:junit-jupiter", version.ref = "junit5" }
+junit5-jupiter-api = { module = "org.junit.jupiter:junit-jupiter-api", version.ref = "junit5" }
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "kotlinx-coroutines" }
 jgit = { module = "org.eclipse.jgit:org.eclipse.jgit", version.ref = "jgit" }
 
