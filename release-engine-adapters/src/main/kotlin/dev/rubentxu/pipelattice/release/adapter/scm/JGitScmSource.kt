@@ -55,11 +55,12 @@ public class JGitScmSource(
 ) : ScmSource {
 
     override suspend fun checkout(request: CheckoutRequest): Outcome<CheckoutResult, ScmFailure> {
+        var git: Git? = null
         return try {
             val repoPath = resolveRepoPath(request.repository)
-            val repo = FileRepositoryBuilder()
-                .setGitDir(repoPath.toFile())
-                .build()
+            // Git.open auto-detects .git for working repos and works for bare repos
+            git = Git.open(repoPath.toFile())
+            val repo = git.repository
 
             val objectId: ObjectId = try {
                 repo.resolve(request.revisionHint)
@@ -69,27 +70,20 @@ public class JGitScmSource(
                 return Outcome.Failure(ScmFailure.Unknown("checkout", "synthetic-missing-ref"))
             } catch (e: AmbiguousObjectException) {
                 return Outcome.Failure(ScmFailure.Unknown("checkout", "synthetic-missing-ref"))
+            } catch (e: IOException) {
+                return Outcome.Failure(ScmFailure.Unknown("checkout", "synthetic-missing-ref"))
             }
 
-            // For bare repositories, create a working directory as a temp directory
-            // and checkout into it
+            // Create a working directory for the checkout
             val workDir = Files.createTempDirectory("jgit-checkout-")
-            val git = Git(repo)
 
-            try {
-                // Set up the working tree and checkout
-                @Suppress("DEPRECATION")
-                val checkoutCmd = git.checkout()
-                    .setStartPoint(objectId.name)
-                    .setForce(true)
-                    .setAllPaths(true)
-                checkoutCmd.call()
-            } catch (e: Exception) {
-                // If checkout fails (e.g. bare repo has no working tree), use the bare repo dir itself
-                // and resolve the revision only
-            } finally {
-                git.close()
-            }
+            // Set up the working tree and checkout
+            @Suppress("DEPRECATION")
+            val checkoutCmd = git.checkout()
+                .setStartPoint(objectId.name)
+                .setForce(true)
+                .setAllPaths(true)
+            checkoutCmd.call()
 
             Outcome.Success(
                 CheckoutResult(
@@ -107,13 +101,16 @@ public class JGitScmSource(
             Outcome.Failure(ScmFailure.Unknown("checkout", "synthetic-missing-ref"))
         } catch (e: Exception) {
             Outcome.Failure(ScmFailure.Unknown("checkout", "synthetic-missing-ref"))
+        } finally {
+            git?.close()
         }
     }
 
     override suspend fun tag(request: TagRequest): Outcome<TagResult, ScmFailure> {
+        var git: Git? = null
         return try {
             val repoPath = resolveRepoPath(request.repository)
-            val git = Git.open(repoPath.toFile())
+            git = Git.open(repoPath.toFile())
             val repo = git.repository
 
             val objectId: ObjectId = try {
@@ -137,11 +134,9 @@ public class JGitScmSource(
             if (existingRef != null) {
                 if (existingRef.objectId == objectId) {
                     // Idempotent: same revision, same tag — success
-                    git.close()
                     return Outcome.Success(TagResult(request.tagName, objectId.name))
                 } else {
                     // Tag exists on different revision
-                    git.close()
                     return Outcome.Failure(
                         ScmFailure.Conflict("tag", "synthetic-tag-exists-different-revision")
                     )
@@ -167,8 +162,6 @@ public class JGitScmSource(
                 revWalk.close()
             }
 
-            git.close()
-
             Outcome.Success(TagResult(request.tagName, objectId.name))
         } catch (e: MissingObjectException) {
             Outcome.Failure(ScmFailure.Unknown("tag", "synthetic-missing-ref"))
@@ -180,24 +173,85 @@ public class JGitScmSource(
             Outcome.Failure(ScmFailure.Unknown("tag", "synthetic-missing-ref"))
         } catch (e: Exception) {
             Outcome.Failure(ScmFailure.Unknown("tag", "synthetic-missing-ref"))
+        } finally {
+            git?.close()
         }
     }
 
     override suspend fun push(request: PushRequest): Outcome<PushResult, ScmFailure> {
-        // Push for file:// repositories does not use remote authentication.
-        // Future: when PushRequest carries credentialsRef, resolve via SecretResolver.
+        var repo: org.eclipse.jgit.lib.Repository? = null
+        var git: Git? = null
         return try {
             val repoPath = resolveRepoPath(request.repository)
-            val repo = FileRepositoryBuilder()
-                .setGitDir(repoPath.toFile())
-                .build()
+            // Open the repository - Git.open auto-detects .git for working repos
+            git = Git.open(repoPath.toFile())
+            repo = git.repository
 
-            val git = Git(repo)
+            // For file:// local repos: ensure the remote is configured.
+            // If the remote doesn't exist, add it pointing to the bare repo.
+            val remoteName = request.remote
+            var remoteConfigured = false
+            try {
+                val url = repo.getConfig().getString("remote", remoteName, "url")
+                remoteConfigured = url != null
+            } catch (e: Exception) {
+                // Remote not configured or other config error
+                remoteConfigured = false
+            }
+            if (!remoteConfigured) {
+                // Remote not configured — add it pointing to the bare repo path.
+                // The bare repo path is derived from the repository URI.
+                val uri = request.repository.value
+                repo.getConfig().setString("remote", remoteName, "url", uri)
+                repo.getConfig().setString("remote", remoteName, "fetch", "+refs/heads/*:refs/remotes/$remoteName/*")
+                repo.getConfig().save()
+            }
 
-            // For local file:// repos, push is a no-op (no remote configured)
-            // Just return success with the ref specs as pushed refs
-            git.close()
+            // Build push command with ref specs
+            val pushCmd = git.push()
+                .setRemote(remoteName)
+                .setRefSpecs(request.refSpecs.map { org.eclipse.jgit.transport.RefSpec(it) })
 
+            val pushResult = pushCmd.call()
+
+            // Inspect push results — check for conflicts/errors
+            // PushResult contains a list of RemoteRefUpdate for each remote
+            var hadError = false
+            var errorMessage = ""
+            for (result in pushResult) {
+                for (remoteUpdate in result.remoteUpdates) {
+                    val status = remoteUpdate.status
+                    when {
+                        status == org.eclipse.jgit.transport.RemoteRefUpdate.Status.OK ||
+                        status == org.eclipse.jgit.transport.RemoteRefUpdate.Status.UP_TO_DATE -> {
+                            // Success — continue checking other refs
+                        }
+                        status == org.eclipse.jgit.transport.RemoteRefUpdate.Status.REJECTED_NONFASTFORWARD -> {
+                            hadError = true
+                            errorMessage = "non-fast-forward rejected"
+                        }
+                        status == org.eclipse.jgit.transport.RemoteRefUpdate.Status.REJECTED_OTHER_REASON -> {
+                            hadError = true
+                            errorMessage = "push rejected by remote"
+                        }
+                        status == org.eclipse.jgit.transport.RemoteRefUpdate.Status.NON_EXISTING -> {
+                            hadError = true
+                            errorMessage = "ref does not exist on remote"
+                        }
+                        else -> {
+                            hadError = true
+                            errorMessage = "push failed: ${status.name.lowercase()}"
+                        }
+                    }
+                    if (hadError) {
+                        return Outcome.Failure(
+                            ScmFailure.Conflict("push", errorMessage)
+                        )
+                    }
+                }
+            }
+
+            // All refs pushed successfully — return success with the ref specs we pushed
             Outcome.Success(
                 PushResult(
                     pushedRefs = request.refSpecs,
@@ -207,7 +261,12 @@ public class JGitScmSource(
         } catch (e: IOException) {
             Outcome.Failure(ScmFailure.Unknown("push", "synthetic-missing-ref"))
         } catch (e: Exception) {
+            System.err.println("DEBUG push exception: ${e.javaClass.simpleName}: ${e.message}")
+            e.printStackTrace()
             Outcome.Failure(ScmFailure.Unknown("push", "synthetic-credentials-unresolved"))
+        } finally {
+            git?.close()
+            repo?.close()
         }
     }
 

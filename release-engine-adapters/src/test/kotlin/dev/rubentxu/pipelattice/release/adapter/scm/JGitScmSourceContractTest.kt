@@ -127,12 +127,13 @@ class JGitScmSourceContractTest : ScmSourceContract() {
     }
 
     /**
-     * Returns the repository reference for checkout tests — points to the real bare repository.
+     * Returns the repository reference for checkout tests — points to the WORKING repository.
+     * Checkout requires a working tree, so we use workDir (cloned from bare), not bareDir.
      */
     override fun checkoutRepositoryRef(): RepositoryRef {
         // Use cached fixture if available; ensureCheckoutFixture() always recreates
         val fix = checkoutFixture ?: ensureCheckoutFixture()
-        return RepositoryRef.parse(fix.bareDir.toUri().toString())
+        return RepositoryRef.parse(fix.workDir.toUri().toString())
     }
 
     /**

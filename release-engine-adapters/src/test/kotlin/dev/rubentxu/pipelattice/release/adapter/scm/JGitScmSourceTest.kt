@@ -134,12 +134,12 @@ class JGitScmSourceTest {
 
     @Test
     fun `push file repo returns success with ref specs`() = runBlocking {
-        val (bareDir, _) = setupBareRepoWithClone("push-repo")
+        val (_, workDir) = setupBareRepoWithClone("push-repo")
 
         val repo = JGitScmSource(FakeSecretResolver())
         val outcome = repo.push(
             PushRequest(
-                repository = RepositoryRef.parse("file://$bareDir"),
+                repository = RepositoryRef.parse("file://$workDir"),
                 remote = "origin",
                 refSpecs = listOf("refs/heads/main"),
             )
