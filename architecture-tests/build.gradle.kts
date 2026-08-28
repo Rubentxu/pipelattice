@@ -235,6 +235,39 @@ tasks.named("check") {
 }
 
 /**
+ * FARCH-017 v2 defensive scan for release-engine-adapters: verify
+ * release-engine-adapters/build.gradle.kts does not contain forbidden tokens
+ * (processbuilder, runtime.exec, snakeyaml, kaml, jackson, gson, serialization).
+ * jgit and kotlinx-coroutines are explicitly allowed in this module.
+ */
+val releaseEngineAdaptersDefensiveScan by tasks.registering {
+    val buildFile = rootProject.file("release-engine-adapters/build.gradle.kts")
+    inputs.file(buildFile)
+    doLast {
+        val content = buildFile.readText()
+        // Token-list reduced: jgit and kotlinx-coroutines are LEGITIMATE in adapters;
+        // EnvSecretResolver.getenv is the adapter's actual mechanism (not forbidden here).
+        val forbiddenTokens = listOf(
+            "processbuilder", "runtime.exec", "exitprocess",
+            "snakeyaml", "kaml", "jackson", "gson", "serialization",
+            "com.google.inject", "org.springframework",
+            "javax.inject", "jakarta.inject", "kotlin.reflect",
+        )
+        val foundTokens = forbiddenTokens.filter { content.lowercase().contains(it) }
+        check(foundTokens.isEmpty()) {
+            "FARCH-017 v2 DEFENSIVE SCAN FAILED: release-engine-adapters/build.gradle.kts " +
+                "contains forbidden tokens: ${foundTokens.joinToString()}. " +
+                "FARCH-017 v2 requires the adapter module to use only jgit + kotlinx-coroutines + foundation + release-engine."
+        }
+        println("FARCH-017 v2 defensive scan PASSED: no forbidden tokens in release-engine-adapters/build.gradle.kts")
+    }
+}
+
+tasks.named("check") {
+    dependsOn(releaseEngineAdaptersDefensiveScan)
+}
+
+/**
  * FARCH-018 secret isolation scan: walk release-engine/src/main/kotlin/**/*.kt files
  * and reject any string literal matching curated secret-shaped patterns.
  */

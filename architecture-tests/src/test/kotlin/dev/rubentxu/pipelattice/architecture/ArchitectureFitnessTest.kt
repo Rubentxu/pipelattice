@@ -272,6 +272,19 @@ class ArchitectureFitnessTest {
     }
 
     @ArchTest
+    fun `FARCH-017 v2 - no reverse-dep from release-engine to release-engine-adapters`(imported: JavaClasses) {
+        // Symmetry rule: release-engine is the port layer; release-engine-adapters is the vendor.
+        // The dependency seam must be one-way (adapters depend on ports, NOT vice versa).
+        rule(
+            noClasses()
+                .that().resideInAPackage("dev.rubentxu.pipelattice.release..")
+                .and().resideOutsideOfPackage("dev.rubentxu.pipelattice.release.adapter..")
+                .should().dependOnClassesThat().resideInAnyPackage("dev.rubentxu.pipelattice.release.adapter.."),
+            "FARCH-017 v2 — release-engine is the port; release-engine-adapters is the vendor; the seam must be one-way",
+        ).check(imported)
+    }
+
+    @ArchTest
     fun `FARCH-017 - release-engine depends only on foundation within pipelattice`(imported: JavaClasses) {
         val rule = noClasses()
             .that().resideInAPackage("dev.rubentxu.pipelattice.release..")

@@ -135,8 +135,10 @@ class Farch018SecretIsolationTest {
         val releaseEnginePath = foundRoot.resolve("release-engine/src/main/kotlin")
         val foundationSecretPath = foundRoot.resolve("foundation/src/main/kotlin/dev/rubentxu/pipelattice/foundation/secret")
         val foundationCapabilityPath = foundRoot.resolve("foundation/src/main/kotlin/dev/rubentxu/pipelattice/foundation/capability")
+        val releaseEngineAdaptersPath = foundRoot.resolve("release-engine-adapters/src/main/kotlin")
 
-        val scanDirs = listOf(releaseEnginePath, foundationSecretPath, foundationCapabilityPath)
+        // Broader scan surface (FARCH-018 v2): includes the new adapter module
+        val scanDirs = listOf(releaseEnginePath, releaseEngineAdaptersPath, foundationSecretPath, foundationCapabilityPath)
             .filter { it.toFile().exists() }
             .onEach { require(it.toFile().isDirectory) { "Scan dir must exist: $it" } }
 
@@ -167,7 +169,8 @@ class Farch018SecretIsolationTest {
             val report = allFindings.joinToString("\n") { (file, finding, _) ->
                 "  ${file}:${finding.lineNumber} [${finding.patternId}] snippet=${finding.snippet}"
             }
-            throw AssertionError("FARCH-018 VIOLATIONS found:\n$report")
+            throw AssertionError("FARCH-018 VIOLATIONS found (broadened scan surface v2):\n$report")
         }
+        println("FARCH-018 secret isolation scan PASSED: no secret-shaped literals in production code (release-engine + release-engine-adapters + foundation/secret + foundation/capability)")
     }
 }

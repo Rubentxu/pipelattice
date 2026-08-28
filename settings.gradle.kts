@@ -38,3 +38,5 @@ include(":graph-projection")
 include(":fleet-diff")
 // M8 — Release engine module (SCM, Artifact & Release ports + fakes + TCKs).
 include(":release-engine")
+// M8 slice 2 — Release engine adapters (JGitScmSource, EnvSecretResolver, LocalFSArtifactRepository, GitTagBasedReleaseManager).
+include(":release-engine-adapters")
