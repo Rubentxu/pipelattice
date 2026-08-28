@@ -4,5 +4,6 @@ plugins {
 
 dependencies {
     testImplementation(kotlin("test"))
+    testImplementation(kotlin("reflect"))
     testImplementation(libs.kotlinx.coroutines.core)
 }

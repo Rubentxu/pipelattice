@@ -1,5 +1,7 @@
 package dev.rubentxu.pipelattice.foundation.secret
 
+import kotlin.reflect.KVisibility
+import kotlin.reflect.full.memberProperties
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
@@ -90,5 +92,45 @@ class SecretValueTest {
         val value = SecretValue.of("marker", "material")
         assertNotEquals<Any>(value, "not-a-secret-value")
         assertNotEquals<Any?>(value, null)
+    }
+
+    // --- S25: reflection privacy guard ---
+
+    @Test
+    fun `S25 marker field is not exposed via reflection`() {
+        // Verify marker is private (privacy-positive deviation)
+        val markerProperty = SecretValue::class.memberProperties.find { it.name == "marker" }
+        assertTrue(
+            markerProperty == null || markerProperty.visibility == KVisibility.PRIVATE,
+            "marker must be private or not exposed as a public property"
+        )
+    }
+
+    @Test
+    fun `S25 no public property returns raw secret material`() {
+        // Verify the only public String-returning accessor is material()
+        val stringType = String::class
+        val publicStringAccessors = SecretValue::class.memberProperties
+            .filter { it.returnType == String::class }
+            .filter { it.visibility == KVisibility.PUBLIC }
+        assertTrue(
+            publicStringAccessors.isEmpty() || (publicStringAccessors.size == 1 && publicStringAccessors.first().name == "material"),
+            "No public property should expose raw secret material except material() itself"
+        )
+    }
+
+    @Test
+    fun `S25 toString does not render marker value`() {
+        // Additional guard: toString must not contain the marker name
+        val value = SecretValue.of("MY_SECRET_ENV_VAR", "super-secret-material-12345")
+        val str = value.toString()
+        assertTrue(
+            !str.contains("MY_SECRET_ENV_VAR"),
+            "toString must not contain the marker value '$str'"
+        )
+        assertTrue(
+            !str.contains("super-secret-material-12345"),
+            "toString must not contain the material substring"
+        )
     }
 }

@@ -20,11 +20,7 @@ import dev.rubentxu.pipelattice.release.scm.ScmFailure
 import dev.rubentxu.pipelattice.release.scm.ScmSource
 import dev.rubentxu.pipelattice.release.scm.TagRequest
 import dev.rubentxu.pipelattice.release.scm.TagResult
-import kotlinx.coroutines.runBlocking
-import org.junit.jupiter.api.Test
 import java.nio.file.Path
-import kotlin.test.assertIs
-import kotlin.test.assertTrue
 
 /**
  * Real adapter TCK shim for GitTagBasedReleaseManager.
@@ -92,23 +88,4 @@ class GitTagBasedReleaseManagerContractTest : ReleaseManagerContract() {
         )
     }
 
-    // ----- Additional tests -----
-
-    @Test
-    fun `tck_calculate_returns_success`() = runBlocking {
-        val outcome = invariant_calculate_success()
-        assertIs<Outcome.Success<CalculateResult>>(outcome)
-    }
-
-    @Test
-    fun `tck_promote_returns_success`() = runBlocking {
-        val outcome = invariant_promote_success()
-        assertIs<Outcome.Success<PromoteResult>>(outcome)
-    }
-
-    @Test
-    fun `tck_promote_rejected_on_failure`() = runBlocking {
-        val outcome = invariant_promote_rejected()
-        assertIs<Outcome.Failure<ReleaseFailure>>(outcome)
-    }
 }

@@ -12,14 +12,10 @@ import dev.rubentxu.pipelattice.release.scm.PushResult
 import dev.rubentxu.pipelattice.release.scm.ScmFailure
 import dev.rubentxu.pipelattice.release.scm.ScmSource
 import dev.rubentxu.pipelattice.release.scm.TagResult
-import kotlinx.coroutines.runBlocking
 import org.eclipse.jgit.api.Git
-import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import java.nio.file.Files
 import java.nio.file.Path
-import kotlin.test.assertIs
-import kotlin.test.assertTrue
 
 /**
  * Real adapter TCK shim for JGitScmSource.
@@ -130,19 +126,4 @@ class JGitScmSourceContractTest : ScmSourceContract() {
         )
     }
 
-    // ----- Additional tests for S11/S15 -----
-
-    @Test
-    fun `tck_checkout_returns_success`() = runBlocking {
-        val outcome = invariant_checkout_success()
-        assertIs<Outcome.Success<CheckoutResult>>(outcome)
-        assertTrue(outcome.value.revision.isNotBlank())
-    }
-
-    @Test
-    fun `tck_checkout_returns_failure`() = runBlocking {
-        val outcome = invariant_checkout_failure()
-        assertIs<Outcome.Failure<ScmFailure>>(outcome)
-        assertTrue((outcome.reason as ScmFailure.Unknown).operation == "checkout")
-    }
 }

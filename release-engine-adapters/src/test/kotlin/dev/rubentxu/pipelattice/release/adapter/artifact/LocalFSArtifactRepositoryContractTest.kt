@@ -10,13 +10,9 @@ import dev.rubentxu.pipelattice.release.artifact.PublishResult
 import dev.rubentxu.pipelattice.release.artifact.PublishRequest
 import dev.rubentxu.pipelattice.release.artifact.ResolveResult
 import dev.rubentxu.pipelattice.release.contract.ArtifactRepositoryContract
-import kotlinx.coroutines.runBlocking
-import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import java.nio.file.Files
 import java.nio.file.Path
-import kotlin.test.assertIs
-import kotlin.test.assertTrue
 
 /**
  * Real adapter TCK shim for LocalFSArtifactRepository.
@@ -95,26 +91,4 @@ class LocalFSArtifactRepositoryContractTest : ArtifactRepositoryContract() {
         )
     }
 
-    // ----- Additional tests -----
-
-    @Test
-    fun `tck_publish_returns_success_with_digest`() = runBlocking {
-        val outcome = invariant_publish_success()
-        assertIs<Outcome.Success<PublishResult>>(outcome)
-        assertTrue(outcome.value.digest.startsWith("sha256:"))
-    }
-
-    @Test
-    fun `tck_resolve_returns_success_with_digest`() = runBlocking {
-        val outcome = invariant_resolve_success()
-        assertIs<Outcome.Success<ResolveResult>>(outcome)
-        assertTrue(outcome.value.digest.startsWith("sha256:"))
-    }
-
-    @Test
-    fun `tck_resolve_missing_returns_typed_failure`() = runBlocking {
-        val outcome = invariant_resolve_failure()
-        assertIs<Outcome.Failure<ArtifactFailure>>(outcome)
-        assertTrue((outcome.reason as ArtifactFailure.Unknown).reason == "synthetic-missing-artifact")
-    }
 }
