@@ -126,6 +126,18 @@ public abstract class ReleaseManagerContract {
         }
     }
 
+    /**
+     * Asserts that the promote result matches expectations.
+     * Default implementation compares the entire PromoteResult (including exact timestamp).
+     * Real adapters override to use timestamp tolerance (±5s) since the expected
+     * timestamp is computed before the real clock moves during promote().
+     */
+    protected open fun assertPromoteSuccess(expected: PromoteResult, actual: PromoteResult) {
+        assertEquals(expected.version, actual.version, "promote version should match")
+        assertEquals(expected.targetEnvironment, actual.targetEnvironment, "promote targetEnvironment should match")
+        assertEquals(expected.promotedAt, actual.promotedAt, "promote timestamp should match")
+    }
+
     @Test
     protected open fun invariant_promote_success() {
         runBlocking {
@@ -138,7 +150,8 @@ public abstract class ReleaseManagerContract {
             setupPromoteSuccess(expected)
             val outcome = subject().promote(request)
             assertTrue(outcome is Outcome.Success, "promote should succeed")
-            assertEquals(expected, (outcome as Outcome.Success).value, "promote should return expected result")
+            val actual = (outcome as Outcome.Success).value
+            assertPromoteSuccess(expected, actual)
         }
     }
 

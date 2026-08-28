@@ -13,6 +13,7 @@ import dev.rubentxu.pipelattice.release.scm.RepositoryRef
 import dev.rubentxu.pipelattice.release.scm.ScmSource
 import dev.rubentxu.pipelattice.release.scm.TagResult
 import org.eclipse.jgit.api.Git
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.io.TempDir
 import java.nio.file.Files
@@ -112,16 +113,24 @@ class JGitScmSourceContractTest : ScmSourceContract() {
      * Real JGit checkout returns the actual SHA from the bare repository fixture.
      */
     override fun expectedCheckoutResult(revisionHint: String): CheckoutResult {
-        val fix = ensureCheckoutFixture()
+        // Use cached fixture if available; ensureCheckoutFixture() always recreates
+        val fix = checkoutFixture ?: ensureCheckoutFixture()
         return CheckoutResult(fix.workDir, fix.headSha)
+    }
+
+    /**
+     * Override assertion hook: compare only revision (commit SHA) since workDir
+     * differs between the fixture's clone path and the actual JGit checkout path.
+     */
+    override fun assertCheckoutSuccess(expectedRef: String, result: CheckoutResult) {
+        assertEquals(expectedRef, result.revision, "checkout revision should match")
     }
 
     /**
      * Returns the repository reference for checkout tests — points to the real bare repository.
      */
     override fun checkoutRepositoryRef(): RepositoryRef {
-        // Use cached fixture - don't recreate! ensureCheckoutFixture() was already called
-        // by expectedCheckoutResult() and created the bare repo with refs
+        // Use cached fixture if available; ensureCheckoutFixture() always recreates
         val fix = checkoutFixture ?: ensureCheckoutFixture()
         return RepositoryRef.parse(fix.bareDir.toUri().toString())
     }
@@ -130,8 +139,19 @@ class JGitScmSourceContractTest : ScmSourceContract() {
      * Real JGit tag returns the actual revision SHA from the bare repository fixture.
      */
     override fun expectedTagResult(tagName: String, revision: String): TagResult {
-        val fix = ensureTagFixture()
+        // Use cached fixture if available; ensureTagFixture() always recreates
+        val fix = tagFixture ?: ensureTagFixture()
         return TagResult(tagName, fix.headSha)
+    }
+
+    /**
+     * Override fixture revision hook: resolve refs/heads/main from the real bare repo
+     * instead of using the fake's hardcoded "abc123def456" which doesn't exist in the fixture.
+     */
+    override fun fixtureTagRevision(): String {
+        // Use cached fixture if available; ensureTagFixture() always recreates
+        val fix = tagFixture ?: ensureTagFixture()
+        return fix.headSha
     }
 
     /**

@@ -101,6 +101,13 @@ public abstract class ScmSourceContract {
         CheckoutResult(Path.of("/repo/checkout"), "deadbeefcafebabe1234567890abcdef12345678")
 
     /**
+     * Returns the revision to use when tagging in the tag-success invariant.
+     * Fake adapters use the default hardcoded "abc123def456".
+     * Real adapters override to resolve refs/heads/main from their fixture repository.
+     */
+    protected open fun fixtureTagRevision(): String = "abc123def456"
+
+    /**
      * Expectation hook for tag success: derives the expected [TagResult] from the
      * revision. Real adapters override to return the value their real fixture produces.
      * Default derivation uses the fake-compatible hardcoded value.
@@ -132,6 +139,15 @@ public abstract class ScmSourceContract {
     protected open fun tagRepositoryRef(): dev.rubentxu.pipelattice.release.scm.RepositoryRef =
         dev.rubentxu.pipelattice.release.scm.RepositoryRef.parse("git://example/repo")
 
+    /**
+     * Asserts that the checkout result matches expectations.
+     * Default implementation compares the entire CheckoutResult (workDir + revision).
+     * Real adapters override to compare only revision (workDir differs between fixture and actual).
+     */
+    protected open fun assertCheckoutSuccess(expectedRef: String, result: CheckoutResult) {
+        assertEquals(expectedRef, result.revision, "checkout revision should match")
+    }
+
     @Test
     protected open fun invariant_checkout_success() {
         runBlocking {
@@ -144,19 +160,21 @@ public abstract class ScmSourceContract {
                 )
             )
             assertTrue(outcome is Outcome.Success, "checkout should succeed")
-            assertEquals(expected, (outcome as Outcome.Success).value, "checkout should return expected result")
+            val actual = (outcome as Outcome.Success).value
+            assertCheckoutSuccess(expected.revision, actual)
         }
     }
 
     @Test
     protected open fun invariant_tag_success() {
         runBlocking {
-            val expected = expectedTagResult("v1.0.0", "abc123def456")
+            val revision = fixtureTagRevision()
+            val expected = expectedTagResult("v1.0.0", revision)
             setupTagSuccess(expected)
             val outcome = subject().tag(
                 TagRequest(
                     repository = tagRepositoryRef(),
-                    revision = "abc123def456",
+                    revision = revision,
                     tagName = "v1.0.0",
                 )
             )

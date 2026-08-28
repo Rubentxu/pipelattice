@@ -19,6 +19,7 @@ import dev.rubentxu.pipelattice.release.release.ReleaseManager
 import dev.rubentxu.pipelattice.release.release.SemanticVersion
 import dev.rubentxu.pipelattice.release.scm.ScmSource
 import org.eclipse.jgit.api.Git
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.junit.jupiter.api.io.TempDir
@@ -156,6 +157,20 @@ class GitTagBasedReleaseManagerContractTest : ReleaseManagerContract() {
      */
     override fun expectedPromoteResult(request: PromoteRequest): PromoteResult =
         PromoteResult(request.version, request.targetEnvironment, java.time.Instant.now().toString())
+
+    /**
+     * Override assertion hook: compare version and environment exactly, but timestamp
+     * with ±5s tolerance since expected timestamp is computed before the real clock moves.
+     */
+    override fun assertPromoteSuccess(expected: PromoteResult, actual: PromoteResult) {
+        assertEquals(expected.version, actual.version, "promote version should match")
+        assertEquals(expected.targetEnvironment, actual.targetEnvironment, "promote targetEnvironment should match")
+        // Timestamp tolerance: ±5 seconds to account for clock drift between expected and actual
+        val expectedInstant = java.time.Instant.parse(expected.promotedAt)
+        val actualInstant = java.time.Instant.parse(actual.promotedAt)
+        val diffSeconds = kotlin.math.abs(expectedInstant.epochSecond - actualInstant.epochSecond)
+        assertTrue(diffSeconds <= 5, "promote timestamp should be within 5s tolerance: expected=$expected, actual=$actual")
+    }
 
     /**
      * Real adapters don't use queue-based scripting.
