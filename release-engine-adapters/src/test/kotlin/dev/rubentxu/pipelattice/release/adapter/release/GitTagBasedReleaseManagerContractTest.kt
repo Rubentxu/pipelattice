@@ -63,13 +63,14 @@ class GitTagBasedReleaseManagerContractTest : ReleaseManagerContract() {
                 }
                 return try {
                     val tagName = request.tagName
-                    val rev = request.revision
+                    // Use refs/heads/main as the revision - the commit SHA in the bare repo
+                    val revisionRef = "refs/heads/main"
                     val existingRef = git.repository.refDatabase.findRef("refs/tags/$tagName")
                     if (existingRef != null) {
                         Outcome.Success(dev.rubentxu.pipelattice.release.scm.TagResult(tagName, existingRef.objectId.name))
                     } else {
                         val revWalk = org.eclipse.jgit.revwalk.RevWalk(git.repository)
-                        val objId = git.repository.resolve(rev)
+                        val objId = git.repository.resolve(revisionRef)
                         val revObj = revWalk.parseAny(objId)
                         val cmd = git.tag().setName(tagName).setObjectId(revObj)
                         cmd.call()
@@ -104,7 +105,7 @@ class GitTagBasedReleaseManagerContractTest : ReleaseManagerContract() {
         }
         val uniqueWorkDir = tempDir.resolve("${repoName}-work-${System.nanoTime()}")
         Git.cloneRepository()
-            .setURI("file://$baseDir")
+            .setURI(baseDir.toUri().toString())
             .setDirectory(uniqueWorkDir.toFile())
             .call()
             .use { workGit ->

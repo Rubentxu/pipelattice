@@ -62,7 +62,7 @@ class JGitScmSourceContractTest : ScmSourceContract() {
         }
         val workDir = tempDir.resolve("work-checkout-${System.nanoTime()}")
         Git.cloneRepository()
-            .setURI("file://$bareDir")
+            .setURI(bareDir.toUri().toString())
             .setDirectory(workDir.toFile())
             .call()
             .use { workGit ->
@@ -90,7 +90,7 @@ class JGitScmSourceContractTest : ScmSourceContract() {
         }
         val workDir = tempDir.resolve("work-tag-${System.nanoTime()}")
         Git.cloneRepository()
-            .setURI("file://$bareDir")
+            .setURI(bareDir.toUri().toString())
             .setDirectory(workDir.toFile())
             .call()
             .use { workGit ->
@@ -120,8 +120,10 @@ class JGitScmSourceContractTest : ScmSourceContract() {
      * Returns the repository reference for checkout tests — points to the real bare repository.
      */
     override fun checkoutRepositoryRef(): RepositoryRef {
-        val fix = ensureCheckoutFixture()
-        return RepositoryRef.parse("file://$fix.bareDir")
+        // Use cached fixture - don't recreate! ensureCheckoutFixture() was already called
+        // by expectedCheckoutResult() and created the bare repo with refs
+        val fix = checkoutFixture ?: ensureCheckoutFixture()
+        return RepositoryRef.parse(fix.bareDir.toUri().toString())
     }
 
     /**
@@ -136,8 +138,10 @@ class JGitScmSourceContractTest : ScmSourceContract() {
      * Returns the repository reference for tag tests — points to the real bare repository.
      */
     override fun tagRepositoryRef(): RepositoryRef {
-        val fix = ensureTagFixture()
-        return RepositoryRef.parse("file://$fix.bareDir")
+        // Use cached fixture - don't recreate! ensureTagFixture() was already called
+        // by expectedTagResult() and created the bare repo with refs
+        val fix = tagFixture ?: ensureTagFixture()
+        return RepositoryRef.parse(fix.bareDir.toUri().toString())
     }
 
     /**
