@@ -57,9 +57,9 @@ public class JGitScmSource(
     override suspend fun checkout(request: CheckoutRequest): Outcome<CheckoutResult, ScmFailure> {
         return try {
             val repoPath = resolveRepoPath(request.repository)
-            val repo = FileRepositoryBuilder()
-                .setGitDir(repoPath.toFile())
-                .build()
+            // Use Git.open() which handles bare repositories correctly
+            val git = Git.open(repoPath.toFile())
+            val repo = git.repository
 
             val objectId: ObjectId = try {
                 repo.resolve(request.revisionHint)
@@ -74,7 +74,6 @@ public class JGitScmSource(
             // For bare repositories, create a working directory as a temp directory
             // and checkout into it
             val workDir = Files.createTempDirectory("jgit-checkout-")
-            val git = Git(repo)
 
             try {
                 // Set up the working tree and checkout
@@ -113,9 +112,9 @@ public class JGitScmSource(
     override suspend fun tag(request: TagRequest): Outcome<TagResult, ScmFailure> {
         return try {
             val repoPath = resolveRepoPath(request.repository)
-            val repo = FileRepositoryBuilder()
-                .setGitDir(repoPath.toFile())
-                .build()
+            // Use Git.open() which handles bare repositories correctly
+            val git = Git.open(repoPath.toFile())
+            val repo = git.repository
 
             val objectId: ObjectId = try {
                 repo.resolve(request.revision)
@@ -126,8 +125,6 @@ public class JGitScmSource(
             } catch (e: AmbiguousObjectException) {
                 return Outcome.Failure(ScmFailure.Unknown("tag", "synthetic-missing-ref"))
             }
-
-            val git = Git(repo)
 
             // Check if tag already exists on a different revision using findRef
             val tagRefName = "refs/tags/${request.tagName}"

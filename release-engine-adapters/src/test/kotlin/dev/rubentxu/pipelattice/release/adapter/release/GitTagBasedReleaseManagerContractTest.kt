@@ -90,9 +90,11 @@ class GitTagBasedReleaseManagerContractTest : ReleaseManagerContract() {
     }
 
     private fun createBareRepoWithCommit(repoName: String, commitMessage: String): Path {
+        // Always recreate: @TempDir is method-scoped, cached path would be stale
         val baseDir = tempDir.resolve(repoName)
-        if (Files.exists(baseDir) && Files.exists(baseDir.resolve("HEAD"))) {
-            return baseDir
+        if (Files.exists(baseDir)) {
+            // Delete stale fixture from previous test method
+            baseDir.toFile().deleteRecursively()
         }
         Files.createDirectories(baseDir)
         Git.init().setDirectory(baseDir.toFile()).setBare(true).call().use { bareGit ->
@@ -115,6 +117,7 @@ class GitTagBasedReleaseManagerContractTest : ReleaseManagerContract() {
     }
 
     private val subject: ReleaseManager by lazy {
+        // Recreate fixture for each access to handle @TempDir method-scoping
         createBareRepoWithCommit("gitman-scm", "scm commit")
         GitTagBasedReleaseManager(realScm, FakeSecretResolver())
     }
