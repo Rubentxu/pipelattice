@@ -5,7 +5,11 @@ Execution roadmap for SDDK cycles. Canonical milestone definitions live in
 
 ## Active Milestones
 
-_None — next milestone (M8+ slices) will be defined when triggered by user request._
+- **m18-m8-release-engine-adapters** — Status: in_progress — M8 slice 2: real production
+  adapters for the `:release-engine` ports delivered in m17 (ScmSource / ArtifactRepository /
+  ReleaseManager), replacing scripted fakes in production wiring while keeping fakes + TCK
+  contract suites as the compliance oracle; includes m18a backlog items (LOW-D1 empty
+  `release/contract/` dir, LOW-D2 `SecretValue.marker` ADR candidate).
 
 ## Recently Closed Milestones
 
