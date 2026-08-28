@@ -6,14 +6,18 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * S17: TCK shim structural discipline guard (v4 spec).
+ * S17: TCK shim structural discipline guard (v5 spec).
  *
  * Verifies:
  * - Zero @Test annotations across all 6 shim files (3 fakes + 3 reals)
  * - Fake shims ≤ 25 LOC (body only, from first override)
  * - Real-adapter shims ≤ 200 LOC (body only, from first override)
+ * - PLUS clause (spec v5): real-adapter shims may ONLY override
+ *   `invariant_invocations_stable` (the fake-only invariant per the
+ *   real-adapter applicability matrix). Any other `override fun invariant_*`
+ *   in a real shim is a spec violation.
  *
- * Per spec v4 acceptance #22.
+ * Per spec v4 acceptance #22 and spec v5 S17 PLUS clause.
  */
 class TckContractTestShimsStructuralGuardTest {
 
@@ -32,6 +36,9 @@ class TckContractTestShimsStructuralGuardTest {
         "release-engine-adapters/src/test/kotlin/dev/rubentxu/pipelattice/release/adapter/artifact/LocalFSArtifactRepositoryContractTest.kt",
         "release-engine-adapters/src/test/kotlin/dev/rubentxu/pipelattice/release/adapter/release/GitTagBasedReleaseManagerContractTest.kt",
     )
+
+    // Per spec v5 real-adapter applicability matrix: ONLY this invariant is fake-only
+    private val ALLOWED_REAL_SHIM_OVERRIDE = setOf("invariant_invocations_stable")
 
     private val projectRoot = File("..").absoluteFile
 
@@ -90,6 +97,41 @@ class TckContractTestShimsStructuralGuardTest {
             assertTrue(
                 nonEmptyBodyLines <= REAL_ADAPTER_LOC_LIMIT,
                 "Real-adapter shim $shimPath body is $nonEmptyBodyLines LOC (limit: $REAL_ADAPTER_LOC_LIMIT)"
+            )
+        }
+    }
+
+    /**
+     * S17 PLUS clause (spec v5): real-adapter shims may ONLY override
+     * `invariant_invocations_stable` (the fake-only invariant per the
+     * real-adapter applicability matrix).
+     *
+     * This test scans each real shim source for `override fun invariant_*`
+     * declarations and asserts the set is ⊆ {invariant_invocations_stable}.
+     */
+    @Test
+    fun `real_shim_override_subset_guard`() {
+        val invariantOverrideRegex = Regex("override\\s+fun\\s+(invariant_\\w+)\\s*\\(")
+        val realShimOverrides = mutableMapOf<String, Set<String>>()
+
+        for (shimPath in realAdapterShims) {
+            val file = File(projectRoot, shimPath)
+            assertTrue(file.exists(), "Real shim not found: ${file.absolutePath}")
+            val content = stripComments(file.readText())
+            val overrides = invariantOverrideRegex.findAll(content)
+                .map { it.groupValues[1] }
+                .toSet()
+            realShimOverrides[shimPath] = overrides
+        }
+
+        for ((shimPath, overrides) in realShimOverrides) {
+            val disallowed = overrides - ALLOWED_REAL_SHIM_OVERRIDE
+            assertTrue(
+                disallowed.isEmpty(),
+                "Real shim $shimPath overrides disallowed invariants: $disallowed. " +
+                "Real adapter shims may ONLY override ${ALLOWED_REAL_SHIM_OVERRIDE} " +
+                "per spec v5 real-adapter applicability matrix. " +
+                "Any other override is a spec violation (vacuous TCK exclusion)."
             )
         }
     }
